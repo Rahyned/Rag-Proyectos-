@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+httpx
+pypdf
+fastembed
+faiss-cpu
+numpy
+python-dotenv
+pytest
