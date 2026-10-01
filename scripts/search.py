@@ -30,7 +30,7 @@ def main() -> None:
         print("Sin resultados.")
         return
     for h in hits:
-        print(f"#{h['rank']} [score={h['score']:.4f}] "
+        print(f"#{h['rank']} [score={h['score']:.4f} · {h.get('engine', '?')}] "
               f"{h['title']} · pág. {h['page']} ({h['chunk_id']})")
         print("   " + h["text"][:200].replace("\n", " ") + "…\n")
 

@@ -1,5 +1,6 @@
 """Configuración del paquete RAG (rutas y parámetros)."""
 
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -19,3 +20,15 @@ DENSE_POOL_FACTOR = 3
 RRF_K = 60
 BM25_K1 = 1.5
 BM25_B = 0.75
+
+
+def dense_enabled() -> bool:
+    """¿Usar el canal denso (modelo + FAISS) en `search`?
+
+    En Vercel arranca apagado (sin descarga de modelo en frío); `RAG_DENSE=1`
+    lo fuerza. Fuera de Vercel queda encendido por defecto.
+    """
+    flag = os.environ.get("RAG_DENSE")
+    if flag is not None:
+        return flag.strip().lower() not in ("0", "false", "no", "")
+    return os.environ.get("VERCEL") != "1"

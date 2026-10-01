@@ -6,6 +6,7 @@ multi-documento con página.
 
 import json
 import re
+import sys
 import unicodedata
 from pathlib import Path
 
@@ -13,7 +14,7 @@ import faiss
 import numpy as np
 
 from .config import (BM25_B, BM25_K1, CHUNKS_PATH, DENSE_POOL_FACTOR,
-                     EMBED_MODEL, INDEX_PATH, RRF_K, TOP_K)
+                     EMBED_MODEL, INDEX_PATH, RRF_K, TOP_K, dense_enabled)
 
 _ACCENT_RE = re.compile(r"[\u0300-\u036f]")
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -101,9 +102,23 @@ class HybridRetriever:
 
     def bm25(self, query: str, top_k: int = TOP_K) -> list[dict]:
         scores = bm25_scores(query, self._tokens_per_doc, self._df, self._n)
-        return self._hits(scores, top_k)
+        return self._hits(scores, top_k, engine="bm25")
 
     def search(self, query: str, top_k: int = TOP_K) -> list[dict]:
+        """Híbrida (RRF) con degradación segura a BM25.
+
+        Nunca lanza por problemas del canal denso: sin modelo, con la descarga
+        caída o con el índice roto, responde igual con lo léxico.
+        """
+        if dense_enabled():
+            try:
+                return self._search_hybrid(query, top_k)
+            except Exception as exc:  # noqa: BLE001 — degradar es lo correcto
+                print(f"[rag] denso no disponible ({exc}); usando BM25",
+                      file=sys.stderr)
+        return self.bm25(query, top_k)
+
+    def _search_hybrid(self, query: str, top_k: int) -> list[dict]:
         pool = min(top_k * DENSE_POOL_FACTOR, self._n)
         dense_vec = self._embed([query])
         _, idx = self.index.search(dense_vec, pool)
@@ -113,9 +128,9 @@ class HybridRetriever:
                 dense[i] = 1.0 / (1.0 + rank)
         lex = bm25_scores(query, self._tokens_per_doc, self._df, self._n)
         combined = rrf(dense, lex)
-        return self._hits(combined, top_k)
+        return self._hits(combined, top_k, engine="hibrida")
 
-    def _hits(self, scores: np.ndarray, top_k: int) -> list[dict]:
+    def _hits(self, scores: np.ndarray, top_k: int, engine: str) -> list[dict]:
         order = np.argsort(-scores)[:top_k]
         hits = []
         for rank, i in enumerate(order):
@@ -125,6 +140,7 @@ class HybridRetriever:
             hits.append({
                 "rank": rank + 1,
                 "score": float(scores[i]),
+                "engine": engine,
                 "chunk_id": chunk["chunk_id"],
                 "doc_id": chunk["doc_id"],
                 "title": chunk["title"],

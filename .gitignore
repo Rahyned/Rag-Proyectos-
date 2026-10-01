@@ -11,3 +11,4 @@ dist/
 .vite/
 
 .cache/
+client/public/corpus/

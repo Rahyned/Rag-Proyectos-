@@ -27,7 +27,7 @@ Pregunta → FAISS (embeddings ONNX locales) + BM25 → RRF → top-k
 |------|------------|
 | API | FastAPI + SSE (`/api/chat`), Swagger en `/docs` |
 | Retrieval | Híbrido: FAISS + BM25 + RRF (portado de `instructor-LSA`) |
-| Embeddings | `intfloat/multilingual-e5-small` vía fastembed (ONNX int8) |
+| Embeddings | `jinaai/jina-embeddings-v2-base-es` (768d) vía fastembed (ONNX) |
 | Generación | Opcional: Gemini u OpenAI-compatible por env vars `LLM_*` |
 | UI | React 19 + Vite 8 + oxlint (ES, sin TypeScript) |
 | Tests | pytest (API + gold set ~25 preguntas con doc+page) |
@@ -70,21 +70,36 @@ Ver `.env.example`:
 
 | Var | Rol |
 |-----|-----|
-| `LLM_MODE` | `gemini` · `none` (forzar modo fragmentos) |
 | `LLM_BASE_URL` | OpenAI-compatible (Gemini: `.../v1beta/openai`) |
 | `LLM_MODEL` | ej. `gemini-3.8-flash` |
 | `LLM_API_KEY` | nunca commiteada; si falta → modo fragmentos |
+| `RAG_DENSE` | `0` apaga el canal denso; en Vercel arranca apagado (`1` lo fuerza) |
+
+## Deploy (Vercel)
+
+Proyecto único: raíz = repo. `vercel.json` ya define todo:
+
+1. Importá el repo en Vercel (build `npm --prefix client ci && npm run build`,
+   salida `client/dist`, función Python `api/rag_api.py`, rewrite `/api/*`).
+2. Env vars opcionales en el dashboard: `LLM_API_KEY` (+ `LLM_MODEL`,
+   `LLM_BASE_URL`) para el modo respuesta sintética.
+3. En Vercel el retrieval arranca en **BM25** (sin descarga de modelo en
+   frío); `RAG_DENSE=1` habilita el híbrido si querés asumir esa descarga.
+4. El build copia `corpus/*.pdf` a `client/public/corpus/`, así las citas
+   `#page=N` abren el PDF desde el CDN.
+5. Nunca roto: sin key → fragmentos; sin modelo → BM25; sin índice → 503
+   claro en la API (los tests lo cubren).
 
 ## Roadmap
 
 | Fase | Entregable | Estado |
 |------|------------|--------|
 | 0 | Andamiaje: FastAPI + React + CI + tests | ✅ |
-| 1 | Manual STELLA (40-60 pág) + PDF + ingest page-aware | 🔄 en curso |
-| 2 | Motor híbrido (FAISS+BM25+RRF) + gold set | ⬜ |
-| 3 | `/api/chat` SSE + modos `gemini`/`none` + rate limit | ⬜ |
-| 4 | UI React: chat + chips de cita `p. N` | ⬜ |
-| 5 | Deploy Vercel | ⬜ |
+| 1 | Manual STELLA (40-60 pág) + PDF + ingest page-aware | ✅ |
+| 2 | Motor híbrido (FAISS+BM25+RRF) + gold set | ✅ |
+| 3 | `/api/chat` SSE + modos `fragmentos`/`sintetica` | ✅ |
+| 4 | UI React: chat + chips de cita `p. N` | ✅ |
+| 5 | Deploy Vercel | 🔄 en curso |
 | 6 | README final + GIF demo | ⬜ |
 | 7 | (opcional) Link desde el portafolio | ⬜ |
 | fut. | Nuevos documentos (otros proyectos) + upload PDFs | ⬜ |
