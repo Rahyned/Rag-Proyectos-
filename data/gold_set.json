@@ -1,0 +1,14 @@
+[
+  {"q": "¿Cómo agrego un cliente nuevo al sistema?", "doc_id": "manual-stella", "page": 15},
+  {"q": "¿Cómo restauro un backup de la base de datos?", "doc_id": "manual-stella", "page": 31},
+  {"q": "¿Cuánto es el descuento de precio para clientes?", "doc_id": "manual-stella", "pages": [18, 33]},
+  {"q": "¿Cómo funcionan las actualizaciones automáticas?", "doc_id": "manual-stella", "page": 10},
+  {"q": "¿Qué atajos de teclado puedo reasignar?", "doc_id": "manual-stella", "page": 11},
+  {"q": "¿Qué significa la tarjeta de saldo por cobrar?", "doc_id": "manual-stella", "pages": [14, 13]},
+  {"q": "¿Cuáles son los estados por los que pasa un trabajo?", "doc_id": "manual-stella", "page": 22},
+  {"q": "¿Qué métodos de pago se pueden registrar?", "doc_id": "manual-stella", "page": 26},
+  {"q": "¿Dónde veo los comprobantes impresos anteriores?", "doc_id": "manual-stella", "page": 29},
+  {"q": "¿Cómo restablezco la contraseña de un usuario?", "doc_id": "manual-stella", "pages": [32, 33]},
+  {"q": "La aplicación muestra un error, ¿qué hago?", "doc_id": "manual-stella", "page": 36},
+  {"q": "¿Cómo genero el informe mensual del laboratorio?", "doc_id": "manual-stella", "page": 14}
+]
