@@ -44,3 +44,15 @@ def test_no_toca_ruta_original():
     mod = _load_entry()
     seen = _run(mod._RestoreApiPath, "/api/chat", b"p=chat")
     assert seen == "/api/chat"
+
+
+def test_quita_prefijo_asistente():
+    mod = _load_entry()
+    seen = _run(mod._RestoreApiPath, "/asistente/api/chat")
+    assert seen == "/api/chat"
+
+
+def test_prefijo_sin_barra_no_toca_nada():
+    mod = _load_entry()
+    seen = _run(mod._RestoreApiPath, "/asistente")
+    assert seen == "/asistente"
