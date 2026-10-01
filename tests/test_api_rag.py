@@ -48,7 +48,7 @@ def test_search_ok():
     hits = resp.json()["hits"]
     assert hits[0]["page"] == 15
     assert hits[0]["citation"] == "📄 Manual STELLA, p. 15"
-    assert hits[0]["url"] == "/docs/manual-stella.pdf#page=15"
+    assert hits[0]["url"] == "/corpus/manual-stella.pdf#page=15"
 
 
 def test_search_query_corta_rechazada():

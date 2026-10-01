@@ -24,7 +24,7 @@ def enrich(hits: list[dict]) -> list[dict]:
     for h in hits:
         item = dict(h)
         item["citation"] = f"📄 {h['title']}, p. {h['page']}"
-        item["url"] = f"/docs/{h['doc_id']}.pdf#page={h['page']}"
+        item["url"] = f"/corpus/{h['doc_id']}.pdf#page={h['page']}"
         out.append(item)
     return out
 

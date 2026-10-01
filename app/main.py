@@ -1,11 +1,15 @@
 import json
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+from rag.config import CORPUS_DIR
 
 from app.services import llm, rag_service
 
@@ -50,6 +54,10 @@ def _hits_or_503(query: str, top_k: int) -> list[dict]:
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+if (Path(CORPUS_DIR)).is_dir():
+    app.mount("/corpus", StaticFiles(directory=str(CORPUS_DIR)), name="corpus")
 
 
 @app.post("/api/search")
