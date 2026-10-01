@@ -1,3 +1,23 @@
+# [project].dependencies: mantener en sync con requirements.txt
+# (Vercel instala con uv desde acá; local seguimos con requirements.txt).
+[project]
+name = "rag-proyectos-api"
+version = "0.1.0"
+description = "API RAG: búsqueda híbrida BM25+denso y chat SSE con citas"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+    "pypdf",
+    "fastembed",
+    "faiss-cpu",
+    "numpy",
+    "python-dotenv",
+    "markdown",
+    "pytest",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
