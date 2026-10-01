@@ -6,4 +6,5 @@ fastembed
 faiss-cpu
 numpy
 python-dotenv
+markdown
 pytest
