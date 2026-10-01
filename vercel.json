@@ -5,7 +5,13 @@
       "root": "client",
       "framework": "vite",
       "buildCommand": "VITE_BASE=/asistente/ npm run build",
-      "outputDirectory": "dist"
+      "outputDirectory": "dist",
+      "rewrites": [
+        {
+          "source": "/asistente/(.*)",
+          "destination": "/$1"
+        }
+      ]
     },
     "api": {
       "root": ".",
@@ -15,17 +21,33 @@
         "api/rag_api.py": {
           "maxDuration": 60
         }
-      }
+      },
+      "routes": [
+        {
+          "src": "/asistente/api/(.*)",
+          "transforms": [
+            {
+              "type": "request.path",
+              "op": "set",
+              "args": "/api/$1"
+            }
+          ]
+        }
+      ]
     }
   },
   "rewrites": [
+    {
+      "source": "/asistente/api/(.*)",
+      "destination": { "service": "api" }
+    },
     {
       "source": "/api/(.*)",
       "destination": { "service": "api" }
     },
     {
       "source": "/asistente/(.*)",
-      "destination": { "service": "web", "path": "/$1" }
+      "destination": { "service": "web" }
     },
     {
       "source": "/(.*)",
