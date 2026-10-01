@@ -1,5 +1,5 @@
 export async function streamChat({ query, mode, onSources, onText, onFallback, onDone }) {
-  const resp = await fetch('/api/chat', {
+  const resp = await fetch(`${import.meta.env.BASE_URL}api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, mode }),

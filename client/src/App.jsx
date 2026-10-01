@@ -111,7 +111,12 @@ export default function App() {
                 <ul className="sources">
                   {m.hits.map((h) => (
                     <li key={h.chunk_id}>
-                      <a className="cite" href={h.url} target="_blank" rel="noreferrer">
+                      <a
+                        className="cite"
+                        href={`${import.meta.env.BASE_URL}corpus/${h.doc_id}.pdf#page=${h.page}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
                         {h.citation}
                       </a>
                       <span className="snippet">
