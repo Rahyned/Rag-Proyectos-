@@ -9,6 +9,7 @@ from rag.hybrid import HybridRetriever
 _retriever: HybridRetriever | None = None
 
 _ACCENT_RE = re.compile(r"[̀-ͯ]")
+_PATH_RE = re.compile(r"(?:[A-Za-z]:\\[^\s\"'<>|]+|(?:/[\w.-]+)+)")
 _SNIPPET_LEN = 200
 _SNIPPET_BEFORE = 80
 
@@ -61,7 +62,12 @@ def _snippet(text: str, query: str) -> str:
 
 
 def last_dense_error() -> str | None:
-    return _hybrid.LAST_DENSE_ERROR
+    """Último error denso, saneado: rutas locales fuera (viaja al cliente
+    vía /api/health)."""
+    err = _hybrid.LAST_DENSE_ERROR
+    if err is None:
+        return None
+    return _PATH_RE.sub("<ruta>", err)[:200]
 
 
 def search(query: str, top_k: int = 5) -> list[dict]:

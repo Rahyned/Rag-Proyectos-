@@ -20,4 +20,9 @@ def llm_base_url() -> str:
 
 def llm_timeout() -> float:
     # Presupuesto total de reintentos; debe dejar margen bajo maxDuration=60s.
-    return float(os.getenv("LLM_TIMEOUT", "45"))
+    # Tolerante: una env var mal escrita ("45s") no puede tirar el stream.
+    try:
+        value = float(os.getenv("LLM_TIMEOUT", "45"))
+    except ValueError:
+        return 45.0
+    return value if value > 0 else 45.0

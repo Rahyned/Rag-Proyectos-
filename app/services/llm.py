@@ -4,8 +4,13 @@ Proveedor por defecto: Groq (base `LLM_BASE_URL` + `/chat/completions`).
 Si no hay LLM_API_KEY o la llamada falla tras los reintentos, se lanza
 LLMError y el endpoint cae al modo fragmentos: nunca se rompe la consulta.
 
+`LLMError.reason` es un enum corto (no_key | rate_limited | timeout |
+interrupted | upstream) que viaja al front como `fallback.reason`: el
+cliente nunca ve el texto crudo de la excepción.
+
 Los reintentos (backoff) solo cubren 5xx/errores de red al iniciar el
 stream; una vez que llegaron tokens no se reintenta (no duplicar texto).
+429 se reintenta una vez si `Retry-After` cabe en el presupuesto.
 """
 
 import json
@@ -14,7 +19,7 @@ from collections.abc import Iterator
 
 import httpx
 
-from app import config
+from app import config, ratelimit
 
 SYSTEM = (
     "Sos el asistente del Manual STELLA, un sistema de gestión para "
@@ -29,10 +34,13 @@ SYSTEM = (
 MAX_ATTEMPTS = 3
 BACKOFF_SECONDS = (0.5, 1.5)
 RETRY_STATUS = frozenset({500, 502, 503, 504, 529})
+RETRY_AFTER_MAX = 8.0
 
 
 class LLMError(Exception):
-    pass
+    def __init__(self, message: str, reason: str = "upstream") -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 def build_prompt(question: str, hits: list[dict]) -> str:
@@ -55,10 +63,22 @@ def _error_detail(resp: httpx.Response) -> str:
         return ""
 
 
+def _retry_after(resp: httpx.Response) -> float:
+    raw = resp.headers.get("retry-after", "")
+    try:
+        return max(float(raw), 0.1)
+    except ValueError:
+        return 1.0
+
+
 def stream_answer(question: str, hits: list[dict]) -> Iterator[str]:
     key = config.llm_api_key()
     if not key:
-        raise LLMError("LLM_API_KEY no configurada")
+        raise LLMError("LLM_API_KEY no configurada", reason="no_key")
+    if ratelimit.groq_limited():
+        raise LLMError(
+            "429 recientes de Groq; degradando sin llamar", reason="rate_limited"
+        )
 
     url = config.llm_base_url().rstrip("/") + "/chat/completions"
     payload = {
@@ -76,13 +96,17 @@ def stream_answer(question: str, hits: list[dict]) -> Iterator[str]:
     headers = {"Authorization": f"Bearer {key}"}
     deadline = time.monotonic() + config.llm_timeout()
     last: LLMError | None = None
+    wait_override: float | None = None
 
     for attempt in range(MAX_ATTEMPTS):
         if attempt:
             remaining = deadline - time.monotonic()
             if remaining < 2:
                 break
-            time.sleep(min(BACKOFF_SECONDS[attempt - 1], max(remaining - 1, 0)))
+            wait = (wait_override if wait_override is not None
+                    else BACKOFF_SECONDS[attempt - 1])
+            wait_override = None
+            time.sleep(min(wait, max(remaining - 1, 0)))
         started = False
         try:
             timeout = max(deadline - time.monotonic(), 1.0)
@@ -92,6 +116,15 @@ def stream_answer(question: str, hits: list[dict]) -> Iterator[str]:
                 headers=headers,
                 timeout=timeout,
             ) as resp:
+                if resp.status_code == 429:
+                    ratelimit.note_groq_429()
+                    err = LLMError("HTTP 429 rate limit", reason="rate_limited")
+                    wait = _retry_after(resp)
+                    if wait > RETRY_AFTER_MAX:
+                        raise err
+                    wait_override = wait
+                    last = err
+                    continue
                 if resp.status_code != 200:
                     detail = _error_detail(resp)
                     err = LLMError(
@@ -114,7 +147,10 @@ def stream_answer(question: str, hits: list[dict]) -> Iterator[str]:
                         continue
                     if "error" in chunk:
                         msg = str(chunk["error"])[:200]
-                        raise LLMError(f"stream: {msg}")
+                        raise LLMError(
+                            f"stream: {msg}",
+                            reason="interrupted" if started else "upstream",
+                        )
                     choices = chunk.get("choices") or [{}]
                     delta = (choices[0].get("delta") or {}).get("content") or ""
                     if delta:
@@ -124,10 +160,17 @@ def stream_answer(question: str, hits: list[dict]) -> Iterator[str]:
                 if not yielded:
                     raise LLMError("respuesta vacía del LLM")
                 return
+        except httpx.TimeoutException as exc:
+            if started:
+                raise LLMError(str(exc), reason="interrupted") from exc
+            last = LLMError(str(exc), reason="timeout")
+            continue
         except httpx.HTTPError as exc:
             if started:
-                raise LLMError(str(exc)) from exc
+                raise LLMError(str(exc), reason="interrupted") from exc
             last = LLMError(str(exc))
             continue
 
-    raise LLMError(str(last) if last else "sin respuesta del LLM")
+    if last is not None:
+        raise last
+    raise LLMError("timeout: sin tiempo para responder", reason="timeout")

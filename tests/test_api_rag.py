@@ -82,6 +82,7 @@ def test_chat_sintetica_sin_llm_cae_a_fragmentos(monkeypatch):
         "query": "agregar cliente", "mode": "sintetica"})
     events = _events(resp.text)
     assert [e["type"] for e in events] == ["sources", "fallback", "done"]
+    assert events[1]["reason"] == "no_key"
     assert events[2]["mode"] == "fragmentos"
 
 
@@ -106,7 +107,81 @@ def test_chat_sintetica_error_llm_cae_a_fragmentos(monkeypatch):
         "query": "agregar cliente", "mode": "sintetica"})
     events = _events(resp.text)
     assert [e["type"] for e in events] == ["sources", "fallback", "done"]
-    assert "boom" in events[1]["reason"]
+    assert events[1]["reason"] == "upstream"
+    assert events[2]["mode"] == "fragmentos"
+
+
+def test_chat_sintetica_reason_se_propaga(monkeypatch):
+    def _fail(q, h):
+        yield from ()
+        raise llm_mod.LLMError("x", reason="rate_limited")
+    monkeypatch.setattr(llm_mod, "stream_answer", _fail)
+    resp = client.post("/api/chat", json={
+        "query": "agregar cliente", "mode": "sintetica"})
+    events = _events(resp.text)
+    assert events[1]["reason"] == "rate_limited"
+
+
+def test_chat_sintetica_sin_fragmentos_no_llama_al_llm(monkeypatch):
+    class EmptyRetriever:
+        def search(self, query, top_k=5):
+            return []
+
+        def bm25(self, query, top_k=5):
+            return []
+
+    rag_service.set_retriever(EmptyRetriever())
+    llamados = []
+
+    def _llm(q, h):
+        llamados.append(1)
+        return iter([])
+
+    monkeypatch.setattr(llm_mod, "stream_answer", _llm)
+    resp = client.post("/api/chat", json={
+        "query": "algo que no existe", "mode": "sintetica"})
+    events = _events(resp.text)
+    assert [e["type"] for e in events] == ["sources", "done"]
+    assert events[1] == {"type": "done", "mode": "fragmentos"}
+    assert llamados == []
+
+
+def test_chat_excepcion_inesperada_cierra_el_stream(monkeypatch):
+    def _boom(q, h):
+        raise ValueError("rara")
+        yield  # pragma: no cover — lo hace generador
+    monkeypatch.setattr(llm_mod, "stream_answer", _boom)
+    resp = client.post("/api/chat", json={
+        "query": "agregar cliente", "mode": "sintetica"})
+    events = _events(resp.text)
+    assert [e["type"] for e in events] == ["sources", "fallback", "done"]
+    assert events[1]["reason"] == "error"
+
+
+def test_query_solo_espacios_rechazada():
+    resp = client.post("/api/search", json={"query": "   "})
+    assert resp.status_code == 422
+
+
+def test_503_no_fuga_internos(monkeypatch):
+    def _boom():
+        raise RuntimeError("C:\\Users\\secreto\\chunks.jsonl no existe")
+    monkeypatch.setattr(rag_service, "get_retriever", _boom)
+    resp = client.post("/api/search", json={"query": "algo"})
+    assert resp.status_code == 503
+    assert "secreto" not in resp.text
+    assert "Recuperación no disponible" in resp.json()["detail"]
+    assert "ref:" in resp.json()["detail"]
+
+
+def test_rate_limit_chat_429():
+    body = {"query": "agregar cliente", "mode": "fragmentos"}
+    resp = None
+    for _ in range(11):
+        resp = client.post("/api/chat", json=body)
+    assert resp.status_code == 429
+    assert "Retry-After" in resp.headers
+    assert "Demasiadas" in resp.json()["detail"]
 
 
 def test_prompt_incluye_paginas():
