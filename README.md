@@ -77,6 +77,29 @@ npm run dev        # http://localhost:5173 (proxy /api -> :8000)
 uv run pytest
 ```
 
+## Agregar un documento nuevo
+
+El corpus es **repo-first**: los PDFs viven en `corpus/` y el índice viaja
+commiteado (el FS de Vercel es read-only, no hay upload en runtime).
+
+1. Soltá el PDF en `corpus/` — el nombre del archivo es el `doc_id`
+   (`mi-proyecto.pdf` → `mi-proyecto`). Los que empiezan con `_` se ignoran.
+2. Opcional: agregá el título legible en `corpus/manifiesto.json`
+   (`{"mi-proyecto": "Proyecto X"}`); sin entrada se usa el nombre del archivo.
+3. Ingestá: `uv run python scripts/ingest.py`
+   (regenera `data/chunks.jsonl` + `data/index.faiss`; con el modelo ya en
+   caché tarda segundos). **No** comitees con `--sin-embed`: deja chunks e
+   índice desincronizados.
+4. Validá contra **todo** el corpus: `uv run pytest` y
+   `RUN_DENSE_TESTS=1 uv run pytest tests/test_gold.py` — el gold y los gates
+   anti-relleno cambian de score cuando cambian los idf.
+5. Commiteá juntos el PDF, `corpus/manifiesto.json`, `data/chunks.jsonl` e
+   `data/index.faiss`, y pusheá: el deploy se dispara solo.
+
+Las citas `📄 <título>, p. N` del chat usan el título del manifiesto y el
+link al PDF (`/corpus/<doc_id>.pdf#page=N`) anda solo para documentos que el
+`prebuild` copió a `client/public/corpus/`.
+
 ## Variables de entorno
 
 Ver `.env.example`:
@@ -157,5 +180,6 @@ Detalles que importan:
 | 8 | LLM Groq + anti-relleno (stopwords, gate, snippet) + health con flags | ✅ |
 | 9 | Hardening: rate limit, errores saneados, cancelación en la UI, headers, CI con uv/oxlint/build | ✅ |
 | 10 | Gap semántico BM25: bonus de proximidad por bigrama → gold 12/12 | ✅ |
+| 11 | Workflow repo-first para nuevos documentos (corpus/ + manifiesto + ingest) | ✅ |
 | fut. | Modelo de embeddings cuantizado bundleado → denso en Vercel | ⬜ |
-| fut. | Nuevos documentos (otros proyectos) + upload PDFs | ⬜ |
+| fut. | Upload en runtime (endpoint + Vercel Blob), si algún día hace falta | ⬜ |

@@ -17,9 +17,18 @@ from rag.chunking import chunk_pdf  # noqa: E402
 from rag.config import (CHUNKS_PATH, CORPUS_DIR, DATA_DIR,  # noqa: E402
                         EMBED_MODEL, INDEX_PATH)
 
-TITLES = {
-    "manual-stella": "Manual STELLA",
-}
+MANIFIESTO_PATH = CORPUS_DIR / "manifiesto.json"
+
+
+def cargar_titulos(path: Path = MANIFIESTO_PATH) -> dict[str, str]:
+    """Títulos legibles por doc_id desde corpus/manifiesto.json.
+
+    Un PDF sin entrada en el manifiesto se indexa igual, con el nombre del
+    archivo como título (el fallback es el stem: "otro-proyecto").
+    """
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def main() -> None:
@@ -34,10 +43,13 @@ def main() -> None:
         sys.exit(f"No hay PDFs en {CORPUS_DIR}")
 
     DATA_DIR.mkdir(exist_ok=True)
+    titulos = cargar_titulos()
     all_chunks = []
     for pdf in pdfs:
         doc_id = pdf.stem
-        title = TITLES.get(doc_id, doc_id)
+        title = titulos.get(doc_id, doc_id)
+        if doc_id not in titulos:
+            print(f"{pdf.name}: sin título en manifiesto → {title!r}")
         chunks = chunk_pdf(pdf, doc_id, title)
         all_chunks.extend(chunks)
         pages = {c.page for c in chunks}
