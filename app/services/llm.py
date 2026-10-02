@@ -65,7 +65,9 @@ def stream_answer(question: str, hits: list[dict]) -> Iterator[str]:
         "model": config.llm_model(),
         "stream": True,
         "temperature": 0.2,
-        "max_tokens": 800,  # tope free de Groq para qwen3.8-27b: 1000 OTPM
+        # free de Groq: OTPM 1000 valida usados + max_tokens por minuto;
+        # con 400 caben ~4-8 respuestas/min y las típicas son ~150 tokens.
+        "max_tokens": 400,
         "messages": [
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": build_prompt(question, hits)},

@@ -3,6 +3,13 @@
 import os
 from pathlib import Path
 
+if os.getenv("VERCEL") == "1":
+    # FS del contenedor read-only salvo /tmp: redirigir las descargas del
+    # modelo de embeddings (hf_xet escribía fuera del caché y fallaba EROFS).
+    os.environ.setdefault("FASTEMBED_CACHE_PATH", "/tmp/fastembed")
+    os.environ.setdefault("HF_HOME", "/tmp/fastembed-hf")
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
 ROOT = Path(__file__).resolve().parent.parent
 CORPUS_DIR = ROOT / "corpus"
 DATA_DIR = ROOT / "data"
