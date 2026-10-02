@@ -1,9 +1,17 @@
 # Rag-Proyectos
 
 Asistente RAG multi-documento sobre la documentación de los proyectos del
-portafolio. **Fase 1**: responde preguntas sobre el *manual de STELLA* con
-citas de página; con el tiempo cada proyecto nuevo (SolutionsCars, Oak,
+portafolio. Responde preguntas sobre el *manual de STELLA* con citas de página
+navegables; con el tiempo cada proyecto nuevo (SolutionsCars, Oak,
 Butterflies…) agrega su propio documento al corpus sin rediseñar nada.
+
+**En producción** (fases 0–7 completadas):
+
+- Directo: <https://rag-proyectos.vercel.app>
+- Desde el portafolio (mismo dominio):
+  <https://portafolio-web-three-gamma.vercel.app/asistente/>
+
+![Demo: pregunta sobre una orden de compra con citas de página](docs/demo.gif)
 
 ## Cómo funciona
 
@@ -32,7 +40,7 @@ Pregunta → FAISS (embeddings ONNX locales) + BM25 → RRF → top-k
 | UI | React 19 + Vite 8 + oxlint (ES, sin TypeScript) |
 | Tests | pytest (API + gold set ~25 preguntas con doc+page) |
 | CI | GitHub Actions (pytest en push/PR) |
-| Deploy | Vercel (API + estáticos en un proyecto, bundle < 500 MB) |
+| Deploy | Vercel: services `web` + `api` en un proyecto + proxy del portafolio |
 
 ## Estructura
 
@@ -42,8 +50,10 @@ data/       índice FAISS + chunks (commiteado, reindexable)
 scripts/    md2pdf + ingest (page-aware)
 rag/        motor: loader, chunker, embeddings, BM25, RRF, RAGService
 app/        FastAPI: /api/health, /api/chat (SSE), /api/sources
+api/        wrapper ASGI de Vercel (normaliza /asistente/api/*)
 tests/      pytest: API + retrieval (gold set)
 client/     React: chat con chips de cita, ES-only en v1
+docs/       GIF del README
 .github/    CI
 ```
 
@@ -52,7 +62,7 @@ client/     React: chat con chips de cita, ES-only en v1
 ```bash
 # API (Python 3.12+)
 python -m venv venv
-venv\Scripts\pip install -r requirements.txt
+venv\Scripts\pip install -r requirements.txt   # o: uv sync
 venv\Scripts\uvicorn app.main:app --reload     # http://localhost:8000
 
 # UI
@@ -61,7 +71,7 @@ npm install
 npm run dev        # http://localhost:5173 (proxy /api -> :8000)
 
 # Tests (0 tokens)
-pytest
+venv\Scripts\python -m pytest
 ```
 
 ## Variables de entorno
@@ -77,18 +87,35 @@ Ver `.env.example`:
 
 ## Deploy (Vercel)
 
-Proyecto único: raíz = repo. `vercel.json` ya define todo:
+`vercel.json` usa el modo **services**: un proyecto con dos servicios.
 
-1. Importá el repo en Vercel (build `npm --prefix client ci && npm run build`,
-   salida `client/dist`, función Python `api/rag_api.py`, rewrite `/api/*`).
-2. Env vars opcionales en el dashboard: `LLM_API_KEY` (+ `LLM_MODEL`,
+| Servicio | Raíz | Qué sirve |
+|----------|------|-----------|
+| `web` | `client/` | UI Vite con `VITE_BASE=/asistente/`; rewrite interno `/asistente/(.*)` → `/$1` |
+| `api` | `.` | FastAPI vía `api/rag_api.py` (wrapper ASGI, `maxDuration` 60) |
+
+Rewrites del proyecto, en orden: `/asistente/api/*` → `api`, `/api/*` →
+`api`, `/asistente/*` → `web`, `/*` → `web`.
+
+Detalles que importan:
+
+1. **El wrapper `api/rag_api.py` normaliza el prefijo**: las rutas
+   `/asistente/api/chat` llegan como tal y se reescriben a `/api/chat` en
+   ASGI antes de que FastAPI enrute (el `request.path` transform de services
+   no se aplicó; se resolvió en el wrapper, con tests).
+2. **uv en el build**: Vercel ejecuta `uv lock`, que exige `[project]` en
+   `pyproject.toml`; `uv.lock` está commiteado.
+3. El `prebuild` de `client/` copia `corpus/*.pdf` a `client/public/corpus/`,
+   así las citas `#page=N` abren el PDF desde el CDN.
+4. Env vars opcionales en el dashboard: `LLM_API_KEY` (+ `LLM_MODEL`,
    `LLM_BASE_URL`) para el modo respuesta sintética.
-3. En Vercel el retrieval arranca en **BM25** (sin descarga de modelo en
+5. En Vercel el retrieval arranca en **BM25** (sin descarga de modelo en
    frío); `RAG_DENSE=1` habilita el híbrido si querés asumir esa descarga.
-4. El build copia `corpus/*.pdf` a `client/public/corpus/`, así las citas
-   `#page=N` abren el PDF desde el CDN.
-5. Nunca roto: sin key → fragmentos; sin modelo → BM25; sin índice → 503
+6. Nunca roto: sin key → fragmentos; sin modelo → BM25; sin índice → 503
    claro en la API (los tests lo cubren).
+7. **Proxy del portafolio** (repo `Portafolio-web`): su `client/vercel.json`
+   manda `/asistente/*` a `https://rag-proyectos.vercel.app/*`, y la ficha
+   STELLA tiene el botón **🤖 ASISTENTE RAG** que entra por ahí.
 
 ## Roadmap
 
@@ -99,7 +126,7 @@ Proyecto único: raíz = repo. `vercel.json` ya define todo:
 | 2 | Motor híbrido (FAISS+BM25+RRF) + gold set | ✅ |
 | 3 | `/api/chat` SSE + modos `fragmentos`/`sintetica` | ✅ |
 | 4 | UI React: chat + chips de cita `p. N` | ✅ |
-| 5 | Deploy Vercel | 🔄 en curso |
-| 6 | README final + GIF demo | ⬜ |
-| 7 | (opcional) Link desde el portafolio | ⬜ |
+| 5 | Deploy Vercel | ✅ |
+| 6 | README final + GIF demo | ✅ |
+| 7 | Link desde el portafolio (botón en ficha STELLA) | ✅ |
 | fut. | Nuevos documentos (otros proyectos) + upload PDFs | ⬜ |
