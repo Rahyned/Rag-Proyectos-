@@ -42,8 +42,8 @@ Pregunta → FAISS (embeddings ONNX locales) + BM25 → RRF → top-k
 | Embeddings | `jinaai/jina-embeddings-v2-base-es` (768d) vía fastembed (ONNX) |
 | Generación | Opcional: Groq (compatible OpenAI) por env vars `LLM_*` |
 | UI | React 19 + Vite 8 + oxlint (ES, sin TypeScript) |
-| Tests | pytest (API + gold set ~25 preguntas con doc+page) |
-| CI | GitHub Actions (pytest en push/PR) |
+| Tests | pytest (49 tests API/retrieval + gold set de 12 preguntas ES) |
+| CI | GitHub Actions: pytest con `uv sync --frozen` + oxlint + build del cliente |
 | Deploy | Vercel: services `web` + `api` en un proyecto + proxy del portafolio |
 
 ## Estructura
@@ -53,7 +53,7 @@ corpus/     fuentes y PDFs (manual-stella.pdf)
 data/       índice FAISS + chunks (commiteado, reindexable)
 scripts/    md2pdf + ingest (page-aware)
 rag/        motor: loader, chunker, embeddings, BM25, RRF, RAGService
-app/        FastAPI: /api/health, /api/chat (SSE), /api/sources
+app/        FastAPI: /api/health, /api/chat (SSE), /api/search, rate limit
 api/        wrapper ASGI de Vercel (normaliza /asistente/api/*)
 tests/      pytest: API + retrieval (gold set)
 client/     React: chat con chips de cita, ES-only en v1
@@ -65,9 +65,8 @@ docs/       GIF del README
 
 ```bash
 # API (Python 3.12+)
-python -m venv venv
-venv\Scripts\pip install -r requirements.txt   # o: uv sync
-venv\Scripts\uvicorn app.main:app --reload     # http://localhost:8000
+uv sync --frozen                # crea .venv desde uv.lock (o: pip install -r requirements.txt)
+uv run uvicorn app.main:app --reload     # http://localhost:8000
 
 # UI
 cd client
@@ -75,7 +74,7 @@ npm install
 npm run dev        # http://localhost:5173 (proxy /api -> :8000)
 
 # Tests (0 tokens)
-venv\Scripts\python -m pytest
+uv run pytest
 ```
 
 ## Variables de entorno
@@ -118,9 +117,10 @@ Detalles que importan:
    `LLM_MODEL` y `RAG_DENSE=0` (denso apagado: el modelo de 640 MB no baja
    en el cold start; el híbrido queda para una máquina con caché o un
    modelo cuantizado chico, ver roadmap).
-5. `/api/health` expone `llm` (key presente), `model`, `dense` y
-   `dense_error` (último fallo del canal denso en el proceso), para saber en
-   caliente si el denso cayó a BM25 y por qué.
+5. `/api/health` expone `status` (`ok`/`degraded`), `retrievable` (índice y
+   chunks presentes), `llm` (key presente), `model`, `dense` y
+   `dense_error` (último fallo del canal denso, con rutas saneadas), para
+   saber en caliente si el denso cayó a BM25 y por qué.
 6. El aviso de build *"`api/` directory will not be built because services
    are configured"* es **esperado** con el modo services: `api/` entra por el
    rewrite, no como build standalone.
@@ -130,6 +130,17 @@ Detalles que importan:
 8. **Proxy del portafolio** (repo `Portafolio-web`): su `client/vercel.json`
    manda `/asistente/*` a `https://rag-proyectos.vercel.app/*`, y la ficha
    STELLA tiene el botón **🤖 ASISTENTE RAG** que entra por ahí.
+9. **Headers de seguridad** (ambos `vercel.json`): en el RAG, CSP estricta
+   (`script-src 'self'`, sin hosts externos) + `nosniff`, `SAMEORIGIN`,
+   `Referrer-Policy` y `Permissions-Policy`; el portafolio lleva las mismas
+   sin CSP (usa Google Fonts).
+10. **Límites y errores**: rate limit en memoria por IP (10/min chat,
+    60/min search → 429 con `Retry-After`), circuito ante 429s de Groq
+    (3 en 60s → degrada sin llamar al proveedor), 429 del LLM se reintenta
+    solo si `Retry-After` cabe en el presupuesto, y todo error viaja al
+    cliente como `reason` de la enumeración (`no_key | rate_limited |
+    timeout | interrupted | upstream | error`) — nunca `str(exc)` (los 503
+    llevan solo un `error_id` de 8 caracteres en el log).
 
 ## Roadmap
 
@@ -144,5 +155,6 @@ Detalles que importan:
 | 6 | README final + GIF demo | ✅ |
 | 7 | Link desde el portafolio (botón en ficha STELLA) | ✅ |
 | 8 | LLM Groq + anti-relleno (stopwords, gate, snippet) + health con flags | ✅ |
+| 9 | Hardening: rate limit, errores saneados, cancelación en la UI, headers, CI con uv/oxlint/build | ✅ |
 | fut. | Modelo de embeddings cuantizado bundleado → denso en Vercel | ⬜ |
 | fut. | Nuevos documentos (otros proyectos) + upload PDFs | ⬜ |

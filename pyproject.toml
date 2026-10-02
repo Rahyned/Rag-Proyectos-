@@ -1,5 +1,5 @@
-# [project].dependencies: mantener en sync con requirements.txt
-# (Vercel instala con uv desde acá; local seguimos con requirements.txt).
+# [project].dependencies: sucesos de `uv export --frozen --no-hashes -o requirements.txt`.
+# (Vercel instala con uv desde acá + uv.lock; requirements.txt es el espejo para pip.)
 [project]
 name = "rag-proyectos-api"
 version = "0.1.0"
@@ -21,3 +21,4 @@ dependencies = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+pythonpath = ["."]
