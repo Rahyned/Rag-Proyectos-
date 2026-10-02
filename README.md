@@ -17,15 +17,17 @@ Butterflies…) agrega su propio documento al corpus sin rediseñar nada.
 
 ```
 Pregunta → FAISS (embeddings ONNX locales) + BM25 → RRF → top-k
+         → gate anti-relleno (score BM25 < 2 → sin respuesta)
          → modo fragmentos (citas, 0 tokens)  ─┐
-         → modo Gemini (respuesta redactada)  ─┴→ UI con chips "p. N"
+         → modo sintética (respuesta Groq)    ─┴→ UI con chips "p. N"
 ```
 
 - **Retrieval 100% local**: `fastembed` (int8, ~40 MB) + `faiss-cpu`, sin
   torch, sin llamadas externas para buscar.
-- **Generación opcional**: si hay `LLM_API_KEY` (Gemini) redacta la respuesta
-  con las citas; si no — o si falla — responde con los fragmentos crudos y
-  sus páginas. El asistente **nunca queda roto**.
+- **Generación opcional**: si hay `LLM_API_KEY` (Groq, API compatible con
+  OpenAI, con reintentos ante 5xx) redacta la respuesta con las citas; si no —
+  o si falla — responde con los fragmentos crudos y sus páginas. El asistente
+  **nunca queda roto**.
 - **Citas navegables**: cada respuesta muestra `📄 Manual STELLA, p. N` y la
   UI abre `manual-stella.pdf#page=N`.
 
@@ -36,7 +38,7 @@ Pregunta → FAISS (embeddings ONNX locales) + BM25 → RRF → top-k
 | API | FastAPI + SSE (`/api/chat`), Swagger en `/docs` |
 | Retrieval | Híbrido: FAISS + BM25 + RRF (portado de `instructor-LSA`) |
 | Embeddings | `jinaai/jina-embeddings-v2-base-es` (768d) vía fastembed (ONNX) |
-| Generación | Opcional: Gemini u OpenAI-compatible por env vars `LLM_*` |
+| Generación | Opcional: Groq (compatible OpenAI) por env vars `LLM_*` |
 | UI | React 19 + Vite 8 + oxlint (ES, sin TypeScript) |
 | Tests | pytest (API + gold set ~25 preguntas con doc+page) |
 | CI | GitHub Actions (pytest en push/PR) |
@@ -80,10 +82,12 @@ Ver `.env.example`:
 
 | Var | Rol |
 |-----|-----|
-| `LLM_BASE_URL` | OpenAI-compatible (Gemini: `.../v1beta/openai`) |
-| `LLM_MODEL` | ej. `gemini-3.8-flash` |
-| `LLM_API_KEY` | nunca commiteada; si falta → modo fragmentos |
-| `RAG_DENSE` | `0` apaga el canal denso; en Vercel arranca apagado (`1` lo fuerza) |
+| `LLM_API_KEY` | clave Groq; nunca commiteada; si falta → modo fragmentos |
+| `LLM_BASE_URL` | OpenAI-compatible (default: `https://api.groq.com/openai/v1`) |
+| `LLM_MODEL` | default `qwen/qwen3.8-27b` (tope free: 1000 tokens de salida/min) |
+| `LLM_TIMEOUT` | presupuesto total de reintentos en segundos (default `45`) |
+| `RAG_DENSE` | `0` apaga el canal denso; `1` lo fuerza (Production: `1`) |
+| `FASTEMBED_CACHE_PATH` | destino de la descarga del modelo (Vercel: `/tmp`) |
 
 ## Deploy (Vercel)
 
@@ -107,13 +111,19 @@ Detalles que importan:
    `pyproject.toml`; `uv.lock` está commiteado.
 3. El `prebuild` de `client/` copia `corpus/*.pdf` a `client/public/corpus/`,
    así las citas `#page=N` abren el PDF desde el CDN.
-4. Env vars opcionales en el dashboard: `LLM_API_KEY` (+ `LLM_MODEL`,
-   `LLM_BASE_URL`) para el modo respuesta sintética.
-5. En Vercel el retrieval arranca en **BM25** (sin descarga de modelo en
-   frío); `RAG_DENSE=1` habilita el híbrido si querés asumir esa descarga.
-6. Nunca roto: sin key → fragmentos; sin modelo → BM25; sin índice → 503
-   claro en la API (los tests lo cubren).
-7. **Proxy del portafolio** (repo `Portafolio-web`): su `client/vercel.json`
+4. Env vars en el dashboard **con scope Production** (las de Preview no
+   aplican al dominio de producción): `LLM_API_KEY`, `LLM_BASE_URL`,
+   `LLM_MODEL`, `RAG_DENSE=1` y `FASTEMBED_CACHE_PATH=/tmp/fastembed`.
+5. `/api/health` expone `llm` (key presente), `model`, `dense` y
+   `dense_error` (último fallo del canal denso en el proceso), para saber en
+   caliente si el denso cayó a BM25 y por qué.
+6. El aviso de build *"`api/` directory will not be built because services
+   are configured"* es **esperado** con el modo services: `api/` entra por el
+   rewrite, no como build standalone.
+7. Nunca roto: sin key → fragmentos; sin modelo → BM25; query ajena al
+   manual → "no encontré nada" (gate de score); sin índice → 503 claro en la
+   API (los tests lo cubren).
+8. **Proxy del portafolio** (repo `Portafolio-web`): su `client/vercel.json`
    manda `/asistente/*` a `https://rag-proyectos.vercel.app/*`, y la ficha
    STELLA tiene el botón **🤖 ASISTENTE RAG** que entra por ahí.
 
@@ -129,4 +139,5 @@ Detalles que importan:
 | 5 | Deploy Vercel | ✅ |
 | 6 | README final + GIF demo | ✅ |
 | 7 | Link desde el portafolio (botón en ficha STELLA) | ✅ |
+| 8 | LLM Groq + anti-relleno (stopwords, gate, snippet) + health con flags | ✅ |
 | fut. | Nuevos documentos (otros proyectos) + upload PDFs | ⬜ |
