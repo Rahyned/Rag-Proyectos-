@@ -13,7 +13,8 @@ from pathlib import Path
 import faiss
 import numpy as np
 
-from .config import (BM25_B, BM25_K1, CHUNKS_PATH, DENSE_POOL_FACTOR,
+from .config import (BM25_B, BM25_BIGRAM_BONUS, BM25_K1, CHUNKS_PATH,
+                     DENSE_POOL_FACTOR,
                      EMBED_MODEL, INDEX_PATH, RRF_K, TOP_K, dense_enabled)
 
 _ACCENT_RE = re.compile(r"[\u0300-\u036f]")
@@ -30,8 +31,9 @@ mi tu es son al ya no si como cual cuando cuanto donde quien esta hay
 """.split())
 
 # Umbral de score BM25 del mejor hit: calibrado sobre este corpus con los
-# stopwords activos. Consultas legítimas del manual quedan ≥ 2.85 y consultas
-# ajenas al manual (recetas, películas, economía) ≤ 0.95 → sin respuesta.
+# stopwords activos y el bonus de proximidad. Consultas legítimas del manual
+# quedan ≥ 4.0 y consultas ajenas (recetas, películas…) ni siquiera tienen
+# términos en el vocabulario → 0.0 → sin respuesta.
 MIN_TOP1_SCORE = 2.0
 
 # Último error del canal denso visto en este proceso (lo expone /api/health).
@@ -74,6 +76,18 @@ def bm25_scores(query: str, tokens_per_doc: list[list[str]],
             tf = doc_tokens.count(t)
             denom = tf + k1 * (1 - b + b * doc_lens[i] / avgdl)
             scores[i] += idf * (tf * (k1 + 1)) / denom
+    # Proximidad: un bigrama consecutivo de la query ("agregar un cliente",
+    # tras quitar stopwords → agreg|client) es señal de frase, no de palabras
+    # sueltas que coinciden por azar en otra página. Sin esto, la query de
+    # "agregar un cliente" la ganaba una página de precios por nombrar
+    # "pedido nuevo" + "todo el sistema" + "cliente".
+    pairs = list(zip(q_tokens, q_tokens[1:]))
+    if pairs:
+        for i, doc_tokens in enumerate(tokens_per_doc):
+            adj = set(zip(doc_tokens, doc_tokens[1:]))
+            hits = sum(1 for p in pairs if p in adj)
+            if hits:
+                scores[i] += BM25_BIGRAM_BONUS * hits
     return scores
 
 

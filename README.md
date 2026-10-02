@@ -156,5 +156,6 @@ Detalles que importan:
 | 7 | Link desde el portafolio (botón en ficha STELLA) | ✅ |
 | 8 | LLM Groq + anti-relleno (stopwords, gate, snippet) + health con flags | ✅ |
 | 9 | Hardening: rate limit, errores saneados, cancelación en la UI, headers, CI con uv/oxlint/build | ✅ |
+| 10 | Gap semántico BM25: bonus de proximidad por bigrama → gold 12/12 | ✅ |
 | fut. | Modelo de embeddings cuantizado bundleado → denso en Vercel | ⬜ |
 | fut. | Nuevos documentos (otros proyectos) + upload PDFs | ⬜ |

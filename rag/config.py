@@ -27,6 +27,10 @@ DENSE_POOL_FACTOR = 3
 RRF_K = 60
 BM25_K1 = 1.5
 BM25_B = 0.75
+# Bonus por bigrama de la query con tokens adyacentes en el documento
+# ("agregar un cliente" → agreg|client). Calibrado sobre el gold: con 1.5
+# el top3 es 12/12; con < 1.0 la página buena no alcanza a entrar.
+BM25_BIGRAM_BONUS = 1.5
 
 
 def dense_enabled() -> bool:

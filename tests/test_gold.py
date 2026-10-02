@@ -12,8 +12,9 @@ import pytest
 from rag.config import GOLD_PATH, INDEX_PATH, TOP_K
 from rag.hybrid import HybridRetriever
 
-MIN_BM25_TOP3 = 10
-MIN_HYBRID_TOP3 = 11
+# Con el bonus de proximidad (BM25_BIGRAM_BONUS) ambos canales dan 12/12.
+MIN_BM25_TOP3 = 12
+MIN_HYBRID_TOP3 = 12
 
 
 def _gold() -> list[dict]:

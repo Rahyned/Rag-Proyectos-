@@ -21,6 +21,24 @@ def test_gate_bloquea_ajenas_al_manual(monkeypatch):
         assert retriever.search(query, 5) == [], query
 
 
+def test_bm25_bigrama_adyacente_recibe_bonus():
+    """Mismo TF y longitud: gana quien tiene el bigrama de la query seguido.
+
+    "agregar un cliente" tokeniza a [agreg, client] (stopwords fuera), así
+    que (agreg, client) es adyacente; con los tokens invertidos no lo es.
+    """
+    from rag.hybrid import BM25_BIGRAM_BONUS, bm25_scores, tokenize
+
+    docs = [tokenize("agregar un cliente"), tokenize("cliente agregar")]
+    df: dict[str, int] = {}
+    for doc in docs:
+        for t in set(doc):
+            df[t] = df.get(t, 0) + 1
+    scores = bm25_scores("agregar cliente", docs, df, len(docs))
+    assert scores[0] > scores[1]
+    assert scores[0] - scores[1] == pytest.approx(BM25_BIGRAM_BONUS)
+
+
 def test_gate_deja_pasar_legitimas(monkeypatch):
     monkeypatch.setenv("RAG_DENSE", "0")
     retriever = _retriever()
