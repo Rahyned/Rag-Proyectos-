@@ -21,6 +21,22 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _PLURAL_SUF = ("es", "as", "os", "s")
 _VERB_SUF = ("ando", "iendo", "ado", "ido", "ar", "er", "ir")
 
+# Funcionales en español: se descartan antes de stemmear para que no inflen
+# el idf ni empujen resultados de relleno en consultas genéricas.
+_STOPWORDS = frozenset("""
+el la los las un una unos unas de del y o a ante bajo con contra desde durante
+en entre hacia hasta para por segun sin sobre tras e que se su sus lo le les
+mi tu es son al ya no si como cual cuando cuanto donde quien esta hay
+""".split())
+
+# Umbral de score BM25 del mejor hit: calibrado sobre este corpus con los
+# stopwords activos. Consultas legítimas del manual quedan ≥ 2.85 y consultas
+# ajenas al manual (recetas, películas, economía) ≤ 0.95 → sin respuesta.
+MIN_TOP1_SCORE = 2.0
+
+# Último error del canal denso visto en este proceso (lo expone /api/health).
+LAST_DENSE_ERROR: str | None = None
+
 
 def _stem(token: str) -> str:
     t = token
@@ -40,7 +56,7 @@ def _stem(token: str) -> str:
 def tokenize(text: str) -> list[str]:
     text = unicodedata.normalize("NFD", text.lower())
     text = _ACCENT_RE.sub("", text)
-    return [_stem(t) for t in _TOKEN_RE.findall(text)]
+    return [_stem(t) for t in _TOKEN_RE.findall(text) if t not in _STOPWORDS]
 
 
 def bm25_scores(query: str, tokens_per_doc: list[list[str]],
@@ -110,10 +126,16 @@ class HybridRetriever:
         Nunca lanza por problemas del canal denso: sin modelo, con la descarga
         caída o con el índice roto, responde igual con lo léxico.
         """
+        lex = bm25_scores(query, self._tokens_per_doc, self._df, self._n)
+        top1 = float(lex.max()) if lex.size else 0.0
+        if top1 < MIN_TOP1_SCORE:
+            return []  # ninguna palabra de la query calza con el manual
+        global LAST_DENSE_ERROR
         if dense_enabled():
             try:
                 return self._search_hybrid(query, top_k)
             except Exception as exc:  # noqa: BLE001 — degradar es lo correcto
+                LAST_DENSE_ERROR = str(exc)[:200]
                 print(f"[rag] denso no disponible ({exc}); usando BM25",
                       file=sys.stderr)
         return self.bm25(query, top_k)

@@ -9,8 +9,9 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from rag.config import CORPUS_DIR
+from rag.config import CORPUS_DIR, dense_enabled
 
+import app.config as config
 from app.services import llm, rag_service
 
 app = FastAPI(title="Rag-Proyectos API", version="0.2.0")
@@ -53,7 +54,13 @@ def _hits_or_503(query: str, top_k: int) -> list[dict]:
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "llm": bool(config.llm_api_key()),
+        "model": config.llm_model(),
+        "dense": dense_enabled(),
+        "dense_error": rag_service.last_dense_error(),
+    }
 
 
 if (Path(CORPUS_DIR)).is_dir():
