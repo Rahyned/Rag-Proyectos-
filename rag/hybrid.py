@@ -102,6 +102,7 @@ class HybridRetriever:
         self._n = len(self.chunks)
         self._model_name = embed_model
         self._model = None
+        self._dense_error: str | None = None
 
     @property
     def _embedding(self):
@@ -131,11 +132,14 @@ class HybridRetriever:
         if top1 < MIN_TOP1_SCORE:
             return []  # ninguna palabra de la query calza con el manual
         global LAST_DENSE_ERROR
-        if dense_enabled():
+        if dense_enabled() and self._dense_error is None:
             try:
                 return self._search_hybrid(query, top_k)
             except Exception as exc:  # noqa: BLE001 — degradar es lo correcto
-                LAST_DENSE_ERROR = str(exc)[:200]
+                # Un solo intento por proceso: si la descarga falló, no
+                # reintentar en cada query (costaría ~50s por consulta).
+                self._dense_error = str(exc)[:200]
+                LAST_DENSE_ERROR = self._dense_error
                 print(f"[rag] denso no disponible ({exc}); usando BM25",
                       file=sys.stderr)
         return self.bm25(query, top_k)

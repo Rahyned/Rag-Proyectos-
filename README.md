@@ -22,8 +22,10 @@ Pregunta → FAISS (embeddings ONNX locales) + BM25 → RRF → top-k
          → modo sintética (respuesta Groq)    ─┴→ UI con chips "p. N"
 ```
 
-- **Retrieval 100% local**: `fastembed` (int8, ~40 MB) + `faiss-cpu`, sin
-  torch, sin llamadas externas para buscar.
+- **Retrieval local**: BM25 corre siempre; el canal denso (FAISS +
+  `fastembed`, ONNX) es **opcional** y su modelo pesa ~640 MB descargados —
+  sin torch y sin llamadas externas, pero **no entra en un cold start de
+  Vercel de 60s**: en producción corre BM25 + gate (ver `RAG_DENSE`).
 - **Generación opcional**: si hay `LLM_API_KEY` (Groq, API compatible con
   OpenAI, con reintentos ante 5xx) redacta la respuesta con las citas; si no —
   o si falla — responde con los fragmentos crudos y sus páginas. El asistente
@@ -86,8 +88,8 @@ Ver `.env.example`:
 | `LLM_BASE_URL` | OpenAI-compatible (default: `https://api.groq.com/openai/v1`) |
 | `LLM_MODEL` | default `qwen/qwen3.8-27b` (tope free: 1000 tokens de salida/min) |
 | `LLM_TIMEOUT` | presupuesto total de reintentos en segundos (default `45`) |
-| `RAG_DENSE` | `0` apaga el canal denso; `1` lo fuerza (Production: `1`) |
-| `FASTEMBED_CACHE_PATH` | destino de la descarga del modelo (Vercel: `/tmp`) |
+| `RAG_DENSE` | `0` (default en Vercel) apaga el denso; `1` lo fuerza — pero jina-v2-es pesa ~640 MB y no baja en un cold start de 60s |
+| `FASTEMBED_CACHE_PATH` | caché de descarga del modelo (en Vercel, `rag/config.py` la fuerza a `/tmp`) |
 
 ## Deploy (Vercel)
 
@@ -113,7 +115,9 @@ Detalles que importan:
    así las citas `#page=N` abren el PDF desde el CDN.
 4. Env vars en el dashboard **con scope Production** (las de Preview no
    aplican al dominio de producción): `LLM_API_KEY`, `LLM_BASE_URL`,
-   `LLM_MODEL`, `RAG_DENSE=1` y `FASTEMBED_CACHE_PATH=/tmp/fastembed`.
+   `LLM_MODEL` y `RAG_DENSE=0` (denso apagado: el modelo de 640 MB no baja
+   en el cold start; el híbrido queda para una máquina con caché o un
+   modelo cuantizado chico, ver roadmap).
 5. `/api/health` expone `llm` (key presente), `model`, `dense` y
    `dense_error` (último fallo del canal denso en el proceso), para saber en
    caliente si el denso cayó a BM25 y por qué.
@@ -140,4 +144,5 @@ Detalles que importan:
 | 6 | README final + GIF demo | ✅ |
 | 7 | Link desde el portafolio (botón en ficha STELLA) | ✅ |
 | 8 | LLM Groq + anti-relleno (stopwords, gate, snippet) + health con flags | ✅ |
+| fut. | Modelo de embeddings cuantizado bundleado → denso en Vercel | ⬜ |
 | fut. | Nuevos documentos (otros proyectos) + upload PDFs | ⬜ |
