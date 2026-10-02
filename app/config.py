@@ -8,15 +8,16 @@ def llm_api_key() -> str:
 
 
 def llm_model() -> str:
-    return os.getenv("LLM_MODEL", "gemini-2.0-flash")
+    return os.getenv("LLM_MODEL", "qwen/qwen3.8-27b")
 
 
 def llm_base_url() -> str:
     return os.getenv(
         "LLM_BASE_URL",
-        "https://generativelanguage.googleapis.com/v1beta",
+        "https://api.groq.com/openai/v1",
     )
 
 
 def llm_timeout() -> float:
-    return float(os.getenv("LLM_TIMEOUT", "60"))
+    # Presupuesto total de reintentos; debe dejar margen bajo maxDuration=60s.
+    return float(os.getenv("LLM_TIMEOUT", "45"))
