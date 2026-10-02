@@ -10,7 +10,7 @@ const EJEMPLOS = [
 let nextId = 1
 
 export default function App() {
-  const [mode, setMode] = useState('fragmentos')
+  const [mode, setMode] = useState('sintetica')
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [messages, setMessages] = useState([])
@@ -59,8 +59,8 @@ export default function App() {
         </div>
         <div className="modes" role="radiogroup" aria-label="Modo de respuesta">
           {[
-            ['fragmentos', 'Fragmentos'],
             ['sintetica', 'Respuesta sintética'],
+            ['fragmentos', 'Fragmentos'],
           ].map(([value, label]) => (
             <button
               key={value}
@@ -106,6 +106,11 @@ export default function App() {
               {m.text && <p className="answer">{m.text}</p>}
               {m.error && <p className="error">{m.error}</p>}
               {m.pending && !m.text && !m.error && <p className="pending">Buscando en el manual…</p>}
+              {!m.pending && !m.text && !m.error && !m.fallback && m.hits.length === 0 && (
+                <p className="notice">
+                  No encontré nada en el manual sobre esa pregunta. ¿Podés reformularla?
+                </p>
+              )}
 
               {m.hits.length > 0 && (
                 <ul className="sources">
@@ -120,7 +125,7 @@ export default function App() {
                         {h.citation}
                       </a>
                       <span className="snippet">
-                        {h.text.length > 220 ? `${h.text.slice(0, 220).trim()}…` : h.text}
+                        {h.snippet ?? h.text.slice(0, 220)}
                       </span>
                     </li>
                   ))}
