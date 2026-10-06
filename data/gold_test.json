@@ -1,0 +1,12 @@
+[
+  {"q": "¿Cómo restauro un backup de la base de datos?", "proyecto": "stella", "doc_id": "manual-stella", "page": 31},
+  {"q": "¿Cuánto es el descuento de precio para clientes?", "proyecto": "stella", "doc_id": "manual-stella", "pages": [18, 33]},
+  {"q": "¿Cómo funcionan las actualizaciones automáticas?", "proyecto": "stella", "doc_id": "manual-stella", "page": 10},
+  {"q": "¿Qué significa la tarjeta de saldo por cobrar?", "proyecto": "stella", "doc_id": "manual-stella", "pages": [14, 13]},
+  {"q": "¿Cuáles son los estados por los que pasa un trabajo?", "proyecto": "stella", "doc_id": "manual-stella", "page": 22},
+  {"q": "¿Qué métodos de pago se pueden registrar?", "proyecto": "stella", "doc_id": "manual-stella", "page": 26},
+  {"q": "¿Dónde veo los comprobantes impresos anteriores?", "proyecto": "stella", "doc_id": "manual-stella", "page": 29},
+  {"q": "¿Cómo restablezco la contraseña de un usuario?", "proyecto": "stella", "doc_id": "manual-stella", "pages": [32, 33]},
+  {"q": "La aplicación muestra un error, ¿qué hago?", "proyecto": "stella", "doc_id": "manual-stella", "page": 36},
+  {"q": "¿Cómo genero el informe mensual del laboratorio?", "proyecto": "stella", "doc_id": "manual-stella", "page": 14}
+]

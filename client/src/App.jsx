@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { streamChat } from './lib/api'
+import { fetchProyectos, streamChat } from './lib/api'
+import { renderMarkdown } from './lib/markdown'
 
 const EJEMPLOS = [
   '¿Cómo agrego un cliente nuevo?',
@@ -8,12 +9,12 @@ const EJEMPLOS = [
 ]
 
 const FALLBACK_TEXT = {
-  no_key: 'Respuesta sintética no disponible (sin LLM configurado); te dejo los fragmentos del manual.',
-  rate_limited: 'El modelo está saturado ahora; te dejo los fragmentos del manual.',
-  timeout: 'El modelo tardó demasiado; te dejo los fragmentos del manual.',
-  interrupted: 'La respuesta se cortó a mitad de camino; revisá los fragmentos del manual.',
-  upstream: 'Respuesta sintética no disponible por un problema del modelo; te dejo los fragmentos del manual.',
-  error: 'Hubo un error inesperado; te dejo los fragmentos del manual.',
+  no_key: 'Respuesta sintética no disponible (sin LLM configurado); te dejo los fragmentos recuperados.',
+  rate_limited: 'El modelo está saturado ahora; te dejo los fragmentos recuperados.',
+  timeout: 'El modelo tardó demasiado; te dejo los fragmentos recuperados.',
+  interrupted: 'La respuesta se cortó a mitad de camino; revisá los fragmentos recuperados.',
+  upstream: 'Respuesta sintética no disponible por un problema del modelo; te dejo los fragmentos recuperados.',
+  error: 'Hubo un error inesperado; te dejo los fragmentos recuperados.',
 }
 
 const REQUEST_TIMEOUT_MS = 60000
@@ -22,12 +23,21 @@ let nextId = 1
 
 export default function App() {
   const [mode, setMode] = useState('sintetica')
+  const [proyecto, setProyecto] = useState('todos')
+  const [proyectos, setProyectos] = useState([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [messages, setMessages] = useState([])
   const [announce, setAnnounce] = useState('')
   const chatRef = useRef(null)
   const ctrlRef = useRef(null)
+
+  useEffect(() => {
+    fetchProyectos().then(setProyectos).catch(() => setProyectos([]))
+  }, [])
+
+  const actual = proyectos.find((p) => p.id === proyecto)
+  const ejemplos = actual?.preguntas?.length ? actual.preguntas : EJEMPLOS
 
   useEffect(() => {
     const el = chatRef.current
@@ -63,6 +73,7 @@ export default function App() {
       await streamChat({
         query: text,
         mode,
+        proyecto,
         signal: ctrl.signal,
         onSources: (hits) => patch((m) => ({ ...m, hits })),
         onText: (delta) => {
@@ -92,8 +103,12 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div>
-          <h1>Asistente del Manual STELLA</h1>
-          <p className="sub">Consultá el manual de gestión para laboratorios dentales</p>
+          <h1>Asistente del portafolio</h1>
+          <p className="sub">
+            {actual
+              ? actual.descripcion
+              : 'Preguntá sobre los proyectos del portafolio'}
+          </p>
         </div>
         <div
           className="modes"
@@ -124,6 +139,20 @@ export default function App() {
         </div>
       </header>
 
+      <div className="proyecto">
+        <label htmlFor="proyecto">Proyecto</label>
+        <select
+          id="proyecto"
+          value={proyecto}
+          onChange={(e) => setProyecto(e.target.value)}
+        >
+          <option value="todos">Todos</option>
+          {proyectos.map((p) => (
+            <option key={p.id} value={p.id}>{p.nombre}</option>
+          ))}
+        </select>
+      </div>
+
       <main className="chat" ref={chatRef}>
         <div className="sr-only" aria-live="polite">
           {announce}
@@ -131,9 +160,13 @@ export default function App() {
 
         {messages.length === 0 && (
           <div className="empty">
-            <p>Hacé una pregunta sobre el manual. Cada respuesta cita la página exacta del PDF.</p>
+            <p>
+              {actual
+                ? `Preguntas sobre ${actual.nombre}. Cada cita indica el proyecto, el documento y la sección.`
+                : 'Hacé una pregunta. Si no elegís un proyecto, lo detecto en el texto. Cada cita indica el proyecto, el documento y la sección.'}
+            </p>
             <div className="chips">
-              {EJEMPLOS.map((q) => (
+              {ejemplos.map((q) => (
                 <button key={q} type="button" className="chip" onClick={() => send(q)}>
                   {q}
                 </button>
@@ -154,7 +187,12 @@ export default function App() {
                   {FALLBACK_TEXT[m.fallback] ?? FALLBACK_TEXT.error}
                 </p>
               )}
-              {m.text && <p className="answer">{m.text}</p>}
+              {m.text && (
+                <div
+                  className="answer"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(m.text) }}
+                />
+              )}
               {m.error && (
                 <p className="error" role="alert">
                   {m.error}
@@ -162,12 +200,12 @@ export default function App() {
               )}
               {m.pending && !m.text && !m.error && (
                 <p className="pending" role="status">
-                  Buscando en el manual…
+                  Buscando…
                 </p>
               )}
               {!m.pending && !m.text && !m.error && !m.fallback && m.hits.length === 0 && (
                 <p className="notice">
-                  No encontré nada en el manual sobre esa pregunta. ¿Podés reformularla?
+                  No encontré información sobre esa pregunta. ¿Podés reformularla?
                 </p>
               )}
 
@@ -175,14 +213,18 @@ export default function App() {
                 <ul className="sources">
                   {m.hits.map((h) => (
                     <li key={h.chunk_id}>
-                      <a
-                        className="cite"
-                        href={`${import.meta.env.BASE_URL}corpus/${h.doc_id}.pdf#page=${h.page}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {h.citation}
-                      </a>
+                      {h.url ? (
+                        <a
+                          className="cite"
+                          href={h.url.startsWith('http') ? h.url : `${import.meta.env.BASE_URL}${h.url}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {h.citation}
+                        </a>
+                      ) : (
+                        <span className="cite estatica">{h.citation}</span>
+                      )}
                       <span className="snippet">
                         {h.snippet ?? h.text.slice(0, 220)}
                       </span>

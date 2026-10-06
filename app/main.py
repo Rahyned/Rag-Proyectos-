@@ -11,7 +11,9 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from rag.config import CHUNKS_PATH, CORPUS_DIR, INDEX_PATH, dense_enabled
+from rag.config import (CHUNKS_PATH, CORPUS_DIR, INDEX_PATH, dense_enabled,
+                        embeddings_provider)
+from rag.manifiesto import ManifiestoError, ids_proyectos, proyectos_publicos
 
 import app.config as config
 from app import ratelimit
@@ -45,11 +47,31 @@ class _QueryMixin(BaseModel):
         return v
 
 
-class SearchRequest(_QueryMixin):
+class _ProyectoMixin(BaseModel):
+    proyecto: str | None = None
+
+    @field_validator("proyecto")
+    @classmethod
+    def _proyecto(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v or v == "todos":
+            return "todos" if v == "todos" else None
+        try:
+            conocidos = ids_proyectos()
+        except ManifiestoError as exc:
+            raise ValueError(str(exc)) from None
+        if v not in conocidos:
+            raise ValueError(f"proyecto desconocido: {v}")
+        return v
+
+
+class SearchRequest(_QueryMixin, _ProyectoMixin):
     top_k: int = Field(default=5, ge=1, le=10)
 
 
-class ChatRequest(_QueryMixin):
+class ChatRequest(_QueryMixin, _ProyectoMixin):
     mode: Literal["fragmentos", "sintetica"] = "fragmentos"
     top_k: int = Field(default=5, ge=1, le=10)
 
@@ -63,9 +85,9 @@ def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _hits_or_503(query: str, top_k: int) -> list[dict]:
+def _hits_or_503(query: str, top_k: int, proyecto: str | None) -> list[dict]:
     try:
-        return rag_service.search(query, top_k)
+        return rag_service.search(query, top_k, proyecto=proyecto)
     except Exception:  # noqa: BLE001 — al cliente solo id de referencia
         error_id = uuid.uuid4().hex[:8]
         log.exception("retrieval fallo [%s]", error_id)
@@ -84,8 +106,17 @@ def health():
         "llm": bool(config.llm_api_key()),
         "model": config.llm_model(),
         "dense": dense_enabled(),
+        "embeddings": embeddings_provider(),
         "dense_error": rag_service.last_dense_error(),
     }
+
+
+@app.get("/api/proyectos")
+def proyectos():
+    try:
+        return {"proyectos": proyectos_publicos()}
+    except ManifiestoError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
 
 
 if (Path(CORPUS_DIR)).is_dir():
@@ -95,7 +126,7 @@ if (Path(CORPUS_DIR)).is_dir():
 @app.post("/api/search")
 def search(body: SearchRequest, request: Request):
     ratelimit.check(request, ratelimit.SEARCH_LIMIT, "search")
-    return {"hits": _hits_or_503(body.query, body.top_k)}
+    return {"hits": _hits_or_503(body.query, body.top_k, body.proyecto)}
 
 
 @app.post("/api/chat")
@@ -104,7 +135,7 @@ def chat(body: ChatRequest, request: Request):
     top_k = body.top_k
     if body.mode == "sintetica":
         top_k = min(top_k, _TOP_K_SINTETICA)
-    hits = _hits_or_503(body.query, top_k)
+    hits = _hits_or_503(body.query, top_k, body.proyecto)
 
     def gen() -> Iterator[str]:
         try:

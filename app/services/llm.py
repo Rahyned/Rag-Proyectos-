@@ -21,15 +21,24 @@ import httpx
 
 from app import config, ratelimit
 
-SYSTEM = (
-    "Sos el asistente del Manual STELLA, un sistema de gestión para "
-    "laboratorios odontológicos. Respondé en español rioplatense (voseo), "
-    "claro y breve, usando SOLO la información de los fragmentos del manual "
-    "que se te proveen. Citá la fuente entre corchetes al final de cada "
-    "afirmación, por ejemplo [Manual STELLA p. 15]. Si la respuesta no está "
-    "en los fragmentos, decilo explícitamente SIN citar ninguna fuente y no "
-    "inventes datos."
-)
+def system_prompt() -> str:
+    """El sistema deja de estar atado a un solo manual: sale del manifiesto."""
+    from rag.manifiesto import ManifiestoError, cargar
+
+    try:
+        nombres = [p["nombre"] for p in cargar()["proyectos"]]
+    except ManifiestoError:
+        nombres = []
+    lista = ", ".join(nombres) if nombres else "los del portafolio"
+    return (
+        "Sos el asistente de los proyectos del portafolio "
+        f"({lista}). Respondé en español rioplatense (voseo), claro y breve, "
+        "usando SOLO la información del contexto recuperado. Citá la fuente "
+        "entre corchetes al final de cada afirmación, con el formato "
+        "[Proyecto · Documento · Sección (pág. N)]. Si la respuesta no está "
+        "en el contexto, decilo explícitamente SIN citar ninguna fuente y no "
+        "inventes datos."
+    )
 
 MAX_ATTEMPTS = 3
 BACKOFF_SECONDS = (0.5, 1.5)
@@ -44,11 +53,13 @@ class LLMError(Exception):
 
 
 def build_prompt(question: str, hits: list[dict]) -> str:
+    from rag.citas import formatear_cita
+
     blocks = []
     for h in hits:
-        blocks.append(f"[{h['title']} pág. {h['page']}]\n{h['text']}")
+        blocks.append(f"[{formatear_cita(h)}]\n{h['text']}")
     return (
-        "Fragmentos del manual:\n\n" + "\n\n---\n\n".join(blocks) +
+        "Contexto recuperado:\n\n" + "\n\n---\n\n".join(blocks) +
         f"\n\nPregunta del usuario: {question}"
     )
 
@@ -95,7 +106,7 @@ def stream_answer(question: str, hits: list[dict]) -> Iterator[str]:
         # con 400 caben ~4-8 respuestas/min y las típicas son ~150 tokens.
         "max_tokens": 400,
         "messages": [
-            {"role": "system", "content": SYSTEM},
+            {"role": "system", "content": system_prompt()},
             {"role": "user", "content": build_prompt(question, hits)},
         ],
     }

@@ -46,3 +46,19 @@ def upstash_redis_rest_url() -> str:
 
 def upstash_redis_rest_token() -> str:
     return os.getenv("UPSTASH_REDIS_REST_TOKEN", "").strip()
+
+
+def jina_api_key() -> str:
+    return os.getenv("JINA_API_KEY", "").strip()
+
+
+def jina_daily_budget() -> int:
+    """Llamadas a la API de embeddings por día UTC. 0 = ilimitado; vacío = 300."""
+    raw = os.getenv("JINA_DAILY_BUDGET", "300").strip()
+    if not raw:
+        return 300
+    try:
+        value = int(raw)
+    except ValueError:
+        return 300
+    return value if value >= 0 else 300

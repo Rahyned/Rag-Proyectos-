@@ -31,7 +31,9 @@ def main() -> None:
         return
     for h in hits:
         print(f"#{h['rank']} [score={h['score']:.4f} · {h.get('engine', '?')}] "
-              f"{h['title']} · pág. {h['page']} ({h['chunk_id']})")
+              f"{h.get('proyecto_nombre') or h.get('proyecto') or ''} · "
+              f"{h['title']} · {h.get('seccion') or ''} · pág. {h.get('page')} "
+              f"({h['chunk_id']})")
         print("   " + h["text"][:200].replace("\n", " ") + "…\n")
 
 

@@ -59,5 +59,48 @@ def test_rrf_favors_documents_ranked_by_both_signals():
 
 def test_chunk_dataclass_roundtrip():
     c = Chunk("d:p1:0", "d", "Doc", 1, "texto")
-    assert c.to_dict() == {"chunk_id": "d:p1:0", "doc_id": "d",
-                           "title": "Doc", "page": 1, "text": "texto"}
+    data = c.to_dict()
+    assert data["chunk_id"] == "d:p1:0"
+    assert data["page"] == 1
+    assert data["proyecto"] == ""
+    assert data["publico"] is False
+
+
+def test_markdown_corta_por_encabezados_y_no_aplana_tablas():
+    from rag.chunking import MIN_CHUNK_CHARS, chunk_markdown
+
+    md = """# Guia
+
+## Alta de clientes
+
+Esta seccion explica como dar de alta un cliente nuevo en el laboratorio con todos los campos obligatorios del formulario.
+
+## Precios
+
+| Rubro | Precio |
+| --- | --- |
+| Corona | 1000 |
+| Puente | 2000 |
+
+### Nota breve
+
+ok
+"""
+    chunks = chunk_markdown(
+        md, "guia", "Guia del proyecto",
+        proyecto="cars", proyecto_nombre="SolutionsCars", tipo="ficha",
+        publico=True, pdf=None, url_publica=None,
+    )
+    from rag.chunking import anteponer_ruta
+    anteponer_ruta(chunks)
+    textos = [c.text for c in chunks]
+    assert any("Alta de clientes" in c.seccion for c in chunks)
+    assert any(c.seccion.startswith("Guia › Alta") for c in chunks)
+    tabla = next(c for c in chunks if "| Rubro | Precio |" in c.text)
+    assert "| Corona | 1000 |" in tabla.text
+    assert "SolutionsCars › Guia del proyecto ›" in tabla.text
+    prosa = [c for c in chunks if "| Rubro |" not in c.text]
+    assert prosa
+    assert all(len(c.text.split("\n\n", 1)[-1]) >= MIN_CHUNK_CHARS or " › " in c.text
+               for c in prosa)
+    assert not any(c.text.strip() == "ok" for c in chunks)

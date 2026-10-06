@@ -1,6 +1,14 @@
+export async function fetchProyectos() {
+  const resp = await fetch(`${import.meta.env.BASE_URL}api/proyectos`)
+  if (!resp.ok) throw new Error(`API ${resp.status}`)
+  const body = await resp.json()
+  return body.proyectos ?? []
+}
+
 export async function streamChat({
   query,
   mode,
+  proyecto,
   signal,
   onSources,
   onText,
@@ -10,7 +18,12 @@ export async function streamChat({
   const resp = await fetch(`${import.meta.env.BASE_URL}api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, mode }),
+    body: JSON.stringify({
+      query,
+      mode,
+      // «Todos» no fuerza un proyecto: la API lo detecta en la pregunta.
+      ...(proyecto && proyecto !== 'todos' ? { proyecto } : {}),
+    }),
     signal,
   })
   if (!resp.ok) {

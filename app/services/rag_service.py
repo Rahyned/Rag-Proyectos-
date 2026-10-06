@@ -4,6 +4,7 @@ import re
 import unicodedata
 
 from rag import hybrid as _hybrid
+from rag.citas import formatear_cita, url_cita
 from rag.hybrid import HybridRetriever
 
 _retriever: HybridRetriever | None = None
@@ -28,12 +29,12 @@ def set_retriever(retriever) -> None:
 
 
 def enrich(hits: list[dict], query: str = "") -> list[dict]:
-    """Agrega cita legible, URL de salto al PDF y snippet de lectura."""
+    """Agrega cita legible, URL pública si existe, y snippet de lectura."""
     out = []
     for h in hits:
         item = dict(h)
-        item["citation"] = f"📄 {h['title']}, p. {h['page']}"
-        item["url"] = f"/corpus/{h['doc_id']}.pdf#page={h['page']}"
+        item["citation"] = formatear_cita(h)
+        item["url"] = url_cita(h)
         item["snippet"] = _snippet(h["text"], query)
         out.append(item)
     return out
@@ -67,8 +68,15 @@ def last_dense_error() -> str | None:
     err = _hybrid.LAST_DENSE_ERROR
     if err is None:
         return None
-    return _PATH_RE.sub("<ruta>", err)[:200]
+    err = _PATH_RE.sub("<ruta>", err)
+    err = re.sub(r"Bearer\s+\S+", "Bearer <omitido>", err)
+    err = re.sub(
+        r"(?i)\b(api[_-]?key|token|authorization)\b\s*[:=]\s*\S+",
+        r"\1=<omitido>",
+        err,
+    )
+    return err[:200]
 
 
-def search(query: str, top_k: int = 5) -> list[dict]:
-    return enrich(get_retriever().search(query, top_k), query)
+def search(query: str, top_k: int = 5, proyecto: str | None = None) -> list[dict]:
+    return enrich(get_retriever().search(query, top_k, proyecto=proyecto), query)

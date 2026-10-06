@@ -16,18 +16,29 @@ client = TestClient(app)
 FAKE_HITS = [
     {"rank": 1, "score": 0.9, "chunk_id": "manual-stella:p15:1",
      "doc_id": "manual-stella", "title": "Manual STELLA", "page": 15,
-     "text": "5.3 Agregar un cliente: completá nombre, mail y lista…"},
+     "text": "5.3 Agregar un cliente: completá nombre, mail y lista…",
+     "proyecto": "stella", "proyecto_nombre": "STELLA",
+     "seccion": "5. Clientes › 5.3 Agregar un cliente",
+     "publico": True, "pdf": "stella/manual-stella.pdf", "tipo": "manual"},
     {"rank": 2, "score": 0.4, "chunk_id": "manual-stella:p16:0",
      "doc_id": "manual-stella", "title": "Manual STELLA", "page": 16,
-     "text": "5.6 Importar clientes desde Excel…"},
+     "text": "5.6 Importar clientes desde Excel…",
+     "proyecto": "stella", "proyecto_nombre": "STELLA",
+     "seccion": "5. Clientes › 5.6 Importar clientes desde Excel",
+     "publico": True, "pdf": "stella/manual-stella.pdf", "tipo": "manual"},
 ]
 
 
 class FakeRetriever:
-    def search(self, query, top_k=5):
+    def __init__(self):
+        self.proyecto = None
+
+    def search(self, query, top_k=5, proyecto=None):
+        self.proyecto = proyecto
         return FAKE_HITS[:top_k]
 
-    def bm25(self, query, top_k=5):
+    def bm25(self, query, top_k=5, proyecto=None):
+        self.proyecto = proyecto
         return FAKE_HITS[:top_k]
 
 
@@ -48,8 +59,10 @@ def test_search_ok():
     assert resp.status_code == 200
     hits = resp.json()["hits"]
     assert hits[0]["page"] == 15
-    assert hits[0]["citation"] == "📄 Manual STELLA, p. 15"
-    assert hits[0]["url"] == "/corpus/manual-stella.pdf#page=15"
+    assert hits[0]["citation"] == (
+        "STELLA · Manual STELLA · 5. Clientes › 5.3 Agregar un cliente (pág. 15)"
+    )
+    assert hits[0]["url"] == "corpus/stella/manual-stella.pdf#page=15"
 
 
 def test_search_query_corta_rechazada():
@@ -125,10 +138,10 @@ def test_chat_sintetica_reason_se_propaga(monkeypatch):
 
 def test_chat_sintetica_sin_fragmentos_no_llama_al_llm(monkeypatch):
     class EmptyRetriever:
-        def search(self, query, top_k=5):
+        def search(self, query, top_k=5, proyecto=None):
             return []
 
-        def bm25(self, query, top_k=5):
+        def bm25(self, query, top_k=5, proyecto=None):
             return []
 
     rag_service.set_retriever(EmptyRetriever())
@@ -180,11 +193,11 @@ def test_sintetica_limita_top_k_y_search_no(monkeypatch):
     vistos = []
 
     class _Recorder:
-        def search(self, query, top_k=5):
+        def search(self, query, top_k=5, proyecto=None):
             vistos.append(top_k)
             return FAKE_HITS[:top_k]
 
-        def bm25(self, query, top_k=5):
+        def bm25(self, query, top_k=5, proyecto=None):
             return FAKE_HITS[:top_k]
 
     rag_service.set_retriever(_Recorder())
@@ -246,6 +259,36 @@ def test_rate_limit_chat_429():
 
 def test_prompt_incluye_paginas():
     prompt = llm_mod.build_prompt("¿cómo?", FAKE_HITS)
-    assert "Manual STELLA pág. 15" in prompt
-    assert "Manual STELLA pág. 16" in prompt
+    assert "STELLA · Manual STELLA · 5. Clientes › 5.3 Agregar un cliente (pág. 15)" in prompt
+    assert "5.6 Importar clientes desde Excel (pág. 16)" in prompt
     assert "¿cómo?" in prompt
+    sistema = llm_mod.system_prompt()
+    assert "contexto recuperado" in sistema
+    assert "STELLA" in sistema
+
+
+def test_search_filtra_proyecto_desconocido():
+    resp = client.post("/api/search", json={"query": "agregar cliente", "proyecto": "no-existe"})
+    assert resp.status_code == 422
+
+
+def test_search_pasa_el_proyecto(monkeypatch):
+    visto = {}
+
+    class _R:
+        def search(self, query, top_k=5, proyecto=None):
+            visto["proyecto"] = proyecto
+            return FAKE_HITS[:top_k]
+
+    rag_service.set_retriever(_R())
+    resp = client.post("/api/search", json={"query": "agregar cliente", "proyecto": "stella"})
+    assert resp.status_code == 200
+    assert visto["proyecto"] == "stella"
+
+
+def test_proyectos_lista_stella():
+    resp = client.get("/api/proyectos")
+    assert resp.status_code == 200
+    ids = [p["id"] for p in resp.json()["proyectos"]]
+    assert "stella" in ids
+    assert "emails_publicos" not in resp.text

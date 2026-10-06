@@ -58,7 +58,10 @@ def _env(monkeypatch):
     monkeypatch.setenv("LLM_TIMEOUT", "45")
 
 
-HITS = [{"title": "Manual STELLA", "page": 7, "text": "Archivo > Backup."}]
+HITS = [{
+    "title": "Manual STELLA", "page": 7, "text": "Archivo > Backup.",
+    "proyecto_nombre": "STELLA", "seccion": "Respaldos",
+}]
 
 
 def test_stream_ok(monkeypatch):
@@ -74,7 +77,8 @@ def test_stream_ok(monkeypatch):
     assert body["stream"] is True
     assert body["model"] == "qwen/qwen3.8-27b"
     assert body["messages"][0]["role"] == "system"
-    assert "[Manual STELLA pág. 7]" in body["messages"][1]["content"]
+    assert "contexto recuperado" in body["messages"][0]["content"]
+    assert "[STELLA · Manual STELLA · Respaldos (pág. 7)]" in body["messages"][1]["content"]
 
 
 def test_retry_on_503_then_ok(monkeypatch):

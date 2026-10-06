@@ -9,26 +9,36 @@ import os
 
 import pytest
 
-from rag.config import GOLD_PATH, INDEX_PATH, TOP_K
+from rag.config import DATA_DIR, INDEX_PATH, TOP_K
 from rag.hybrid import HybridRetriever
 
-# BM25: 12 del set original (bonus de bigrama) + 3 de la auditoría
-# (sinónimos y «¿Qué es STELLA?»), las tres también en el top3.
-# La híbrida mantiene el piso de 12: las nuevas no se revalidaron con el modelo.
-MIN_BM25_TOP3 = 15
-MIN_HYBRID_TOP3 = 12
+GOLD_TEST_PATH = DATA_DIR / "gold_test.json"
+GOLD_TUNING_PATH = DATA_DIR / "gold_tuning.json"
+
+# El set de medición (gold_test) no se usa para mover el umbral.
+# 10/10 en BM25; la híbrida mantiene el piso histórico de 8 sobre este corte.
+MIN_BM25_TOP3 = 10
+MIN_HYBRID_TOP3 = 8
 
 
 def _gold() -> list[dict]:
-    if not GOLD_PATH.exists():
-        pytest.skip("gold_set.json no generado")
-    return json.loads(GOLD_PATH.read_text(encoding="utf-8"))
+    if not GOLD_TEST_PATH.exists():
+        pytest.skip("gold_test.json no generado")
+    return json.loads(GOLD_TEST_PATH.read_text(encoding="utf-8"))
 
 
 def _retriever() -> HybridRetriever:
-    if not (GOLD_PATH.exists() and INDEX_PATH.exists()):
+    if not (GOLD_TEST_PATH.exists() and INDEX_PATH.exists()):
         pytest.skip("índice no generado (corré scripts/ingest.py)")
     return HybridRetriever()
+
+
+def test_gold_tiene_proyecto_y_los_cortes_no_se_pisan():
+    test = json.loads(GOLD_TEST_PATH.read_text(encoding="utf-8"))
+    tuning = json.loads(GOLD_TUNING_PATH.read_text(encoding="utf-8"))
+    assert test and tuning
+    assert all(item["proyecto"] == "stella" for item in test + tuning)
+    assert not ({item["q"] for item in test} & {item["q"] for item in tuning})
 
 
 def _expected(entry: dict) -> list[int]:

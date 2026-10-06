@@ -1,4 +1,6 @@
-"""Anti-relleno: gate de score y snippet de lectura."""
+"""Anti-relleno: gate de score, filtro por proyecto y snippet de lectura."""
+
+import json
 
 import pytest
 
@@ -55,7 +57,8 @@ def test_enrich_snippet_centra_en_la_query():
     assert "backup" in item["snippet"]
     assert item["snippet"].startswith("…")
     assert len(item["snippet"]) <= 202
-    assert item["citation"] == "📄 Manual STELLA, p. 7"
+    assert "Manual STELLA" in item["citation"]
+    assert "(pág. 7)" in item["citation"]
 
 
 def test_enrich_snippet_sin_coincidencia_toma_la_cabecera():
@@ -112,3 +115,43 @@ def test_search_real_agrega_snippet(monkeypatch):
         rag_service.set_retriever(None)
     assert hits
     assert "cliente" in hits[0]["snippet"]
+    assert "STELLA" in hits[0]["citation"]
+
+
+def test_filtra_y_detecta_proyecto(monkeypatch, tmp_path):
+    """El metadato se aplica antes de rankear; si no hay selector, mira la pregunta."""
+    import faiss
+    import numpy as np
+
+    monkeypatch.setenv("RAG_DENSE", "0")
+    texto = "alta de un cliente nuevo en el laboratorio con lista de precios"
+    filas = []
+    for proyecto, nombre in (("stella", "STELLA"), ("cars", "SolutionsCars")):
+        filas.append({
+            "chunk_id": f"{proyecto}:p1:0",
+            "doc_id": proyecto,
+            "title": nombre,
+            "page": 1,
+            "text": texto,
+            "proyecto": proyecto,
+            "proyecto_nombre": nombre,
+            "seccion": "Clientes",
+            "publico": proyecto == "stella",
+            "tipo": "ficha",
+        })
+    path = tmp_path / "chunks.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(f, ensure_ascii=False) for f in filas) + "\n",
+        encoding="utf-8",
+    )
+    index = faiss.IndexFlatIP(4)
+    index.add(np.ones((2, 4), dtype=np.float32))
+    faiss.write_index(index, str(tmp_path / "index.faiss"))
+    retriever = HybridRetriever(path, tmp_path / "index.faiss")
+    solo = retriever.search("agregar un cliente nuevo", 5, proyecto="stella")
+    assert solo and {h["proyecto"] for h in solo} == {"stella"}
+    detectado = retriever.search("agregar un cliente nuevo en STELLA", 5)
+    assert detectado and {h["proyecto"] for h in detectado} == {"stella"}
+    cita = rag_service.enrich(solo, "cliente")[0]
+    assert cita["url"] is None
+    assert cita["citation"] == "STELLA · STELLA · Clientes (pág. 1)"
