@@ -79,6 +79,12 @@ def stream_answer(question: str, hits: list[dict]) -> Iterator[str]:
         raise LLMError(
             "429 recientes de Groq; degradando sin llamar", reason="rate_limited"
         )
+    # El cupo se consume recién acá: ni no_key ni el circuito abierto llaman
+    # a Groq, y un presupuesto agotado tampoco.
+    if not ratelimit.reservar_llamada_llm():
+        raise LLMError(
+            "presupuesto diario de LLM agotado", reason="rate_limited"
+        )
 
     url = config.llm_base_url().rstrip("/") + "/chat/completions"
     payload = {

@@ -2,6 +2,7 @@
 
 import json
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -172,6 +173,65 @@ def test_503_no_fuga_internos(monkeypatch):
     assert "secreto" not in resp.text
     assert "Recuperación no disponible" in resp.json()["detail"]
     assert "ref:" in resp.json()["detail"]
+
+
+def test_sintetica_limita_top_k_y_search_no(monkeypatch):
+    monkeypatch.setattr(config, "llm_api_key", lambda: "")
+    vistos = []
+
+    class _Recorder:
+        def search(self, query, top_k=5):
+            vistos.append(top_k)
+            return FAKE_HITS[:top_k]
+
+        def bm25(self, query, top_k=5):
+            return FAKE_HITS[:top_k]
+
+    rag_service.set_retriever(_Recorder())
+    client.post("/api/chat", json={
+        "query": "agregar cliente", "mode": "sintetica", "top_k": 10})
+    client.post("/api/chat", json={
+        "query": "agregar cliente", "mode": "fragmentos", "top_k": 10})
+    client.post("/api/search", json={"query": "agregar cliente", "top_k": 10})
+    assert vistos == [5, 10, 10]
+
+
+def test_presupuesto_agotado_evento_fallback(monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_DAILY_BUDGET", "1")
+    calls = []
+
+    class _Ctx:
+        def __init__(self, resp: httpx.Response) -> None:
+            self._resp = resp
+
+        def __enter__(self) -> httpx.Response:
+            return self._resp
+
+        def __exit__(self, *_exc) -> bool:
+            return False
+
+    def _stream(method, url, **_kwargs):
+        calls.append(url)
+        body = (
+            'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'
+            "data: [DONE]\n\n"
+        )
+        resp = httpx.Response(
+            200, text=body, request=httpx.Request(method, url),
+        )
+        return _Ctx(resp)
+
+    monkeypatch.setattr(llm_mod.httpx, "stream", _stream)
+    body = {"query": "agregar cliente", "mode": "sintetica"}
+    primero = _events(client.post("/api/chat", json=body).text)
+    segundo = _events(client.post("/api/chat", json=body).text)
+    assert primero[-1] == {"type": "done", "mode": "sintetica"}
+    assert any(
+        e.get("type") == "fallback" and e.get("reason") == "rate_limited"
+        for e in segundo
+    )
+    assert len(calls) == 1
 
 
 def test_rate_limit_chat_429():

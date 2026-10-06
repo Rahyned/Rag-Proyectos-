@@ -17,9 +17,11 @@ Butterflies…) agrega su propio documento al corpus sin rediseñar nada.
 
 ```
 Pregunta → FAISS (embeddings ONNX locales) + BM25 → RRF → top-k
-         → gate anti-relleno (score BM25 < 2 → sin respuesta)
+         → gate anti-relleno (score BM25 < 2 → sin respuesta;
+           si nombra un documento del manifiesto y hay un término conocido,
+           pasa y prioriza la introducción)
          → modo fragmentos (citas, 0 tokens)  ─┐
-         → modo sintética (respuesta Groq)    ─┴→ UI con chips "p. N"
+         → modo sintética (respuesta Groq, top_k efectivo ≤ 5) ─┴→ UI con chips "p. N"
 ```
 
 - **Retrieval local**: BM25 corre siempre; el canal denso (FAISS +
@@ -42,7 +44,7 @@ Pregunta → FAISS (embeddings ONNX locales) + BM25 → RRF → top-k
 | Embeddings | `jinaai/jina-embeddings-v2-base-es` (768d) vía fastembed (ONNX) |
 | Generación | Opcional: Groq (compatible OpenAI) por env vars `LLM_*` |
 | UI | React 19 + Vite 8 + oxlint (ES, sin TypeScript) |
-| Tests | pytest (49 tests API/retrieval + gold set de 12 preguntas ES) |
+| Tests | pytest (73 passed, 1 skipped; gold set de 15 preguntas ES) |
 | CI | GitHub Actions: pytest con `uv sync --frozen` + oxlint + build del cliente |
 | Deploy | Vercel: services `web` + `api` en un proyecto + proxy del portafolio |
 
@@ -110,6 +112,9 @@ Ver `.env.example`:
 | `LLM_BASE_URL` | OpenAI-compatible (default: `https://api.groq.com/openai/v1`) |
 | `LLM_MODEL` | default `qwen/qwen3.8-27b` (tope free: 1000 tokens de salida/min) |
 | `LLM_TIMEOUT` | presupuesto total de reintentos en segundos (default `45`) |
+| `LLM_DAILY_BUDGET` | llamadas a Groq por día UTC (default `300`; `0` = ilimitado). Vacío en `.env` usa el default |
+| `UPSTASH_REDIS_REST_URL` | opcional. Base REST de Upstash. Si falta (o Redis falla) el rate limit y el cupo quedan en memoria |
+| `UPSTASH_REDIS_REST_TOKEN` | opcional. Token del REST. Nunca commiteado |
 | `RAG_DENSE` | `0` (default en Vercel) apaga el denso; `1` lo fuerza — pero jina-v2-es pesa ~640 MB y no baja en un cold start de 60s |
 | `FASTEMBED_CACHE_PATH` | caché de descarga del modelo (en Vercel, `rag/config.py` la fuerza a `/tmp`) |
 
@@ -157,13 +162,37 @@ Detalles que importan:
    (`script-src 'self'`, sin hosts externos) + `nosniff`, `SAMEORIGIN`,
    `Referrer-Policy` y `Permissions-Policy`; el portafolio lleva las mismas
    sin CSP (usa Google Fonts).
-10. **Límites y errores**: rate limit en memoria por IP (10/min chat,
-    60/min search → 429 con `Retry-After`), circuito ante 429s de Groq
-    (3 en 60s → degrada sin llamar al proveedor), 429 del LLM se reintenta
-    solo si `Retry-After` cabe en el presupuesto, y todo error viaja al
-    cliente como `reason` de la enumeración (`no_key | rate_limited |
+10. **Límites y errores**: ver la sección de abajo. Circuito ante 429s de
+    Groq (3 en 60s → degrada sin llamar al proveedor), 429 del LLM se
+    reintenta solo si `Retry-After` cabe en el presupuesto, y todo error
+    viaja al cliente como `reason` de la enumeración (`no_key | rate_limited |
     timeout | interrupted | upstream | error`) — nunca `str(exc)` (los 503
     llevan solo un `error_id` de 8 caracteres en el log).
+
+### Límites
+
+El limiter de la app es por IP y por endpoint (`chat` 10/min, `search`
+60/min → 429 con `Retry-After`). Si existen `UPSTASH_REDIS_REST_URL` y
+`UPSTASH_REDIS_REST_TOKEN`, la ventana es fija de 60 s en Upstash Redis REST
+(`INCR` + `EXPIRE`, clave `rl:{endpoint}:{ip}:{ventana}`). Si las vars no
+están o Redis falla, se usa el contador en memoria de esa instancia y la
+consulta sigue: nunca se rompe por Redis.
+
+En Vercel Hobby hay varias instancias y el plan deja **una** regla de
+firewall. Además del limiter de la app, este paso es **manual** en el
+dashboard:
+
+1. Proyecto → **Firewall** → **Rate Limiting** → Add Rule.
+2. Una sola regla (Hobby: máximo 1), ventana **fija**, clave **IP**.
+3. Aplicarla a `/api/chat` y `/asistente/api/chat`.
+4. Ejemplo: **10 requests / 60 s** → acción **429**.
+
+`LLM_DAILY_BUDGET` (default 300, `0` = ilimitado) corta las llamadas a Groq
+por día UTC. El contador es `llm:budget:YYYY-MM-DD` en Redis (TTL 2 días) o
+en memoria si no hay Redis. Al pasarse, `/api/chat` en modo sintética emite
+`fallback` con `reason=rate_limited` y no llama al proveedor. En sintética el
+`top_k` efectivo queda en 5 aunque el cliente pida más; `/api/search` sigue
+hasta 10.
 
 ## Roadmap
 
