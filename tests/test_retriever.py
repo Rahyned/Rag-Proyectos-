@@ -71,8 +71,24 @@ def test_enrich_snippet_sin_coincidencia_toma_la_cabecera():
     assert not item["snippet"].startswith("…")
 
 
+def test_el_nombre_no_abre_el_gate(monkeypatch):
+    """«stella» solo no alcanza: hace falta otro término del manual."""
+    monkeypatch.setenv("RAG_DENSE", "0")
+    retriever = _retriever()
+    assert retriever.search("stella quién ganó el oscar", 5) == []
+    pages = [h["page"] for h in retriever.search("¿Qué es STELLA?", 5)]
+    assert 4 in pages[:3]
+    gold = json.loads(
+        (INDEX_PATH.parent / "gold_test.json").read_text(encoding="utf-8")
+    )
+    for entry in gold:
+        hits = retriever.search(entry["q"], 5)
+        esperadas = entry.get("pages") or [entry["page"]]
+        assert any(h["page"] in esperadas for h in hits[:3]), entry["q"]
+
+
 def test_que_es_stella_incluye_la_introduccion(monkeypatch):
-    """El nombre del documento abre el gate aunque el BM25 no llegue a 2."""
+    """«¿Qué es STELLA?» prioriza la introducción aunque el nombre esté en todo el manual."""
     monkeypatch.setenv("RAG_DENSE", "0")
     pages = [h["page"] for h in _retriever().search("¿Qué es STELLA?", 5)]
     assert 4 in pages[:3]

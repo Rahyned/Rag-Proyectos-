@@ -1,5 +1,47 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-06 — fix/post-merge-2026-10-06
+
+### Added
+
+- Pausa de Jina de 10 minutos tras un timeout, un 5xx o un 429. Vive en
+  memoria y, si hay Upstash, en `jina:circuit`. Mientras dura, la consulta
+  va a BM25 sin esperar el timeout.
+- Redirect permanente de `/asistente/corpus/manual-stella.pdf` a
+  `/asistente/corpus/stella/manual-stella.pdf`.
+- En el README, cómo correr `scripts/comparar_embeddings.py` con la key en
+  el entorno: coseno mínimo 0.99, o reindexar con `--provider api`.
+
+### Changed
+
+- `JINA_DAILY_BUDGET` se descuenta solo cuando la llamada responde OK. El
+  cliente HTTP de Jina se reutiliza (keep-alive) en vez de abrirse por
+  consulta. El log de un fallo deja el status o `timeout`, sin la key.
+- El gate ya no cuenta el nombre del documento ni del proyecto como término.
+  Ese nombre sale del puntaje del umbral y hace falta al menos otra palabra
+  con df>0. «¿Qué es STELLA?» sigue priorizando la introducción por su
+  camino propio. El umbral sigue en 2.0.
+
+### Fixed
+
+- El guardrail no veía asignaciones después de `_` (`LLM_API_KEY`,
+  `JINA_API_KEY`, `UPSTASH_REDIS_REST_TOKEN`). Ahora también corta `gsk_`,
+  `jina_`, `sk-` / `sk-proj-`, `AIza` y un valor asignado a un nombre Upstash.
+- Un manifiesto inválido le responde al cliente «configuración inválida».
+  La ruta queda solo en el log.
+
+### Files
+
+- `rag/secretos.py`, `rag/embeddings.py`, `rag/hybrid.py`, `app/ratelimit.py`,
+  `app/main.py`, `vercel.json`
+- `tests/test_secretos.py`, `tests/test_embeddings.py`, `tests/test_retriever.py`,
+  `tests/test_api_rag.py`
+- `README.md`, `CHANGELOG.md`
+
+### Tests
+
+105 passed, 1 skipped
+
 ## 2026-10-06 — feat/multi-proyecto
 
 ### Added

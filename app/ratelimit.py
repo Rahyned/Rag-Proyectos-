@@ -31,6 +31,9 @@ _MAX_IPS = 10_000
 # 429s recientes de Groq → circuito abierto.
 GROQ_TRIP = 3
 GROQ_WINDOW_SECONDS = 60.0
+# Timeout, 5xx o 429 de Jina: no se vuelve a esperar el timeout hasta que pase.
+JINA_CIRCUIT_SECONDS = 10 * 60
+_JINA_CIRCUIT_KEY = "jina:circuit"
 
 # La clave de la ventana fija vive un poco más que la ventana, para que el
 # INCR de los últimos segundos no expire antes del cambio de bucket.
@@ -49,6 +52,7 @@ _lock = threading.Lock()
 _hits: dict[str, deque[float]] = defaultdict(deque)
 _groq_429: deque[float] = deque(maxlen=64)
 _budget: dict[str, int] = {}
+_jina_pause_until = 0.0
 
 
 def client_ip(request: Request) -> str:
@@ -227,9 +231,112 @@ def reservar_llamada_llm() -> bool:
     return _reservar("llm", config.llm_daily_budget())
 
 
-def reservar_llamada_jina() -> bool:
-    """True si esta consulta puede pegarle a la API de embeddings."""
-    return _reservar("jina", config.jina_daily_budget())
+def _leer_cupo_redis(prefix: str) -> int:
+    key = _budget_key(prefix)
+    data = _redis_pipeline([["GET", key]])
+    raw = data[0]["result"]
+    if raw is None:
+        return 0
+    return int(raw)
+
+
+def _leer_cupo_memoria(prefix: str) -> int:
+    key = _budget_key(prefix)
+    with _lock:
+        return int(_budget.get(key, 0))
+
+
+def _cupo_disponible(prefix: str, budget: int) -> bool:
+    """True si todavía entra una llamada. No incrementa el contador."""
+    if budget == 0:
+        return True
+    if _redis_configured():
+        try:
+            return _leer_cupo_redis(prefix) < budget
+        except Exception as exc:  # noqa: BLE001 — fail-open al cupo local
+            log.warning(
+                "Redis no disponible (%s); cupo de %s en memoria", exc, prefix
+            )
+    return _leer_cupo_memoria(prefix) < budget
+
+
+def _anotar_redis(prefix: str) -> None:
+    key = _budget_key(prefix)
+    _redis_pipeline([
+        ["INCR", key],
+        ["EXPIRE", key, _BUDGET_TTL_SECONDS],
+    ])
+
+
+def _anotar_memoria(prefix: str) -> None:
+    key = _budget_key(prefix)
+    marca = f"{prefix}:budget:"
+    with _lock:
+        for dia in [k for k in _budget if k.startswith(marca) and k != key]:
+            del _budget[dia]
+        _budget[key] = _budget.get(key, 0) + 1
+
+
+def _anotar(prefix: str, budget: int) -> None:
+    """Suma una llamada que ya respondió bien. 0 = ilimitado, no incrementa."""
+    if budget == 0:
+        return
+    if _redis_configured():
+        try:
+            _anotar_redis(prefix)
+            return
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "Redis no disponible (%s); cupo de %s en memoria", exc, prefix
+            )
+    _anotar_memoria(prefix)
+
+
+def puede_llamar_jina() -> bool:
+    """True si el cupo diario todavía no se agotó. No lo descuenta."""
+    return _cupo_disponible("jina", config.jina_daily_budget())
+
+
+def anotar_llamada_jina() -> None:
+    """Descuenta una llamada a Jina que respondió OK."""
+    _anotar("jina", config.jina_daily_budget())
+
+
+def jina_en_pausa() -> bool:
+    """True si un fallo reciente dejó la API en pausa (memoria o Upstash)."""
+    global _jina_pause_until
+    now = time.monotonic()
+    with _lock:
+        if now < _jina_pause_until:
+            return True
+    if not _redis_configured():
+        return False
+    try:
+        data = _redis_pipeline([["GET", _JINA_CIRCUIT_KEY]])
+    except Exception as exc:  # noqa: BLE001 — sin Redis, vale la memoria
+        log.warning("Redis no disponible (%s); circuito de jina en memoria", exc)
+        return False
+    if not data[0]["result"]:
+        return False
+    with _lock:
+        _jina_pause_until = time.monotonic() + JINA_CIRCUIT_SECONDS
+    return True
+
+
+def abrir_pausa_jina() -> None:
+    """Pausa Jina JINA_CIRCUIT_SECONDS. La próxima consulta no espera el timeout."""
+    global _jina_pause_until
+    hasta = time.monotonic() + JINA_CIRCUIT_SECONDS
+    with _lock:
+        _jina_pause_until = hasta
+    if not _redis_configured():
+        return
+    try:
+        _redis_pipeline([[
+            "SET", _JINA_CIRCUIT_KEY, "1", "EX", JINA_CIRCUIT_SECONDS,
+        ]])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("no se pudo abrir el circuito de jina en Redis (%s)", exc)
 
 
 def note_groq_429() -> None:
@@ -247,7 +354,9 @@ def groq_limited() -> bool:
 
 def reset() -> None:
     """Solo para tests."""
+    global _jina_pause_until
     with _lock:
         _hits.clear()
         _groq_429.clear()
         _budget.clear()
+        _jina_pause_until = 0.0

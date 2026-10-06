@@ -286,6 +286,31 @@ def test_search_pasa_el_proyecto(monkeypatch):
     assert visto["proyecto"] == "stella"
 
 
+def test_manifiesto_roto_no_muestra_la_ruta(monkeypatch, caplog):
+    import logging
+
+    from rag.manifiesto import ManifiestoError
+
+    def boom():
+        raise ManifiestoError("no existe el archivo corpus/stella/secreto.md")
+
+    monkeypatch.setattr("app.main.ids_proyectos", boom)
+    monkeypatch.setattr("app.main.proyectos_publicos", boom)
+    with caplog.at_level(logging.ERROR, logger="rag.api"):
+        busqueda = client.post(
+            "/api/search",
+            json={"query": "agregar cliente", "proyecto": "stella"},
+        )
+        lista = client.get("/api/proyectos")
+    assert busqueda.status_code == 422
+    assert lista.status_code == 503
+    for resp in (busqueda, lista):
+        assert "configuración inválida" in resp.text
+        assert "corpus/" not in resp.text
+        assert "secreto.md" not in resp.text
+    assert "corpus/stella/secreto.md" in " ".join(caplog.messages)
+
+
 def test_proyectos_lista_stella():
     resp = client.get("/api/proyectos")
     assert resp.status_code == 200

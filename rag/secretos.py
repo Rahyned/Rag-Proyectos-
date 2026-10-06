@@ -12,10 +12,21 @@ _AWS = re.compile(r"\bAKIA[0-9A-Z]{16}\b")
 _SK = re.compile(r"\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{8,}\b")
 _GH = re.compile(r"\b(?:ghp|gho|github_pat)_[A-Za-z0-9_]{10,}\b")
 _HF = re.compile(r"\bhf_[A-Za-z0-9]{10,}\b")
+_GROQ = re.compile(r"\bgsk_[A-Za-z0-9]{20,}\b")
+_JINA = re.compile(r"\bjina_[A-Za-z0-9]{20,}\b")
+_OPENAI = re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9]{20,}\b")
+_GOOGLE = re.compile(r"\bAIza[0-9A-Za-z\-_]{35}\b")
 _BEARER = re.compile(r"\bBearer\s+[A-Za-z0-9\-._]{20,}")
+# El nombre puede llevar prefijo con guion bajo (LLM_API_KEY, REST_TOKEN).
+# `\b` no corta ahí: `_` cuenta como caracter de palabra.
 _ASIGNACION = re.compile(
-    r"(?i)\b(?:api[_-]?key|secret|access[_-]?token|token)\b\s*[:=]\s*['\"]?"
-    r"[A-Za-z0-9\-._]{12,}"
+    r"(?i)(?<![A-Za-z0-9])(?:[A-Za-z0-9]+[_-])*"
+    r"(?:api[_-]?key|secret|access[_-]?token|token)"
+    r"\s*[:=]\s*['\"]?[A-Za-z0-9\-._]{12,}"
+)
+_UPSTASH = re.compile(
+    r"(?i)(?<![A-Za-z0-9])upstash(?:[_-][A-Za-z0-9]+)*"
+    r"\s*[:=]\s*['\"]?[A-Za-z0-9+/=_\-]{20,}"
 )
 _JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}")
 _NOMBRE_SENSIBLE = ("auditoria", "vulnerabilidad")
@@ -47,7 +58,11 @@ def revisar_texto(texto: str, origen: str, emails_publicos: list[str]) -> None:
         raise SecretosError(f"{origen}: se detectó una clave privada")
     if _CUIT.search(texto):
         raise SecretosError(f"{origen}: se detectó un CUIT o CUIL")
-    if any(p.search(texto) for p in (_AWS, _SK, _GH, _HF, _BEARER, _ASIGNACION, _JWT)):
+    patrones = (
+        _AWS, _SK, _GH, _HF, _GROQ, _JINA, _OPENAI, _GOOGLE,
+        _BEARER, _ASIGNACION, _UPSTASH, _JWT,
+    )
+    if any(p.search(texto) for p in patrones):
         raise SecretosError(f"{origen}: se detectó una clave o un token")
     for email in _EMAIL.findall(texto):
         if email.lower() not in permitidos:
