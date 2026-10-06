@@ -72,9 +72,9 @@ def _redis_configured() -> bool:
     return bool(_redis_url() and _redis_token())
 
 
-def _budget_key(moment: datetime | None = None) -> str:
+def _budget_key(prefix: str = "llm", moment: datetime | None = None) -> str:
     dia = (moment or datetime.now(timezone.utc)).strftime("%Y-%m-%d")
-    return f"llm:budget:{dia}"
+    return f"{prefix}:budget:{dia}"
 
 
 def _redis_pipeline(commands: list) -> list:
@@ -175,27 +175,28 @@ def check(request: Request, limit: int, endpoint: str = "api") -> None:
     _check_memory(endpoint, ip, limit)
 
 
-def _reservar_redis(budget: int) -> bool:
-    key = _budget_key()
+def _reservar_redis(prefix: str, budget: int) -> bool:
+    key = _budget_key(prefix)
     data = _redis_pipeline([
         ["INCR", key],
         ["EXPIRE", key, _BUDGET_TTL_SECONDS],
     ])
     n = int(data[0]["result"])
     if n > budget:
-        # El INCR ya corrió pero esta llamada no va a Groq: se revierte.
+        # El INCR ya corrió pero esta llamada no sale: se revierte.
         try:
             _redis_pipeline([["DECR", key]])
         except Exception as exc:  # noqa: BLE001 — el rechazo igual vale
-            log.warning("no se pudo revertir el cupo de LLM (%s)", exc)
+            log.warning("no se pudo revertir el cupo de %s (%s)", prefix, exc)
         return False
     return True
 
 
-def _reservar_memoria(budget: int) -> bool:
-    key = _budget_key()
+def _reservar_memoria(prefix: str, budget: int) -> bool:
+    key = _budget_key(prefix)
+    marca = f"{prefix}:budget:"
     with _lock:
-        for dia in [k for k in _budget if k != key]:
+        for dia in [k for k in _budget if k.startswith(marca) and k != key]:
             del _budget[dia]
         n = _budget.get(key, 0)
         if n >= budget:
@@ -204,20 +205,31 @@ def _reservar_memoria(budget: int) -> bool:
         return True
 
 
-def reservar_llamada_llm() -> bool:
-    """True si esta llamada puede ir a Groq (y el cupo queda consumido).
+def _reservar(prefix: str, budget: int) -> bool:
+    """True si esta llamada puede salir (y el cupo queda consumido).
 
     0 = ilimitado, no incrementa. Si Redis falla, el cupo sigue en memoria.
     """
-    budget = config.llm_daily_budget()
     if budget == 0:
         return True
     if _redis_configured():
         try:
-            return _reservar_redis(budget)
+            return _reservar_redis(prefix, budget)
         except Exception as exc:  # noqa: BLE001 — mismo fail-open que el rate limit
-            log.warning("Redis no disponible (%s); cupo de LLM en memoria", exc)
-    return _reservar_memoria(budget)
+            log.warning(
+                "Redis no disponible (%s); cupo de %s en memoria", exc, prefix
+            )
+    return _reservar_memoria(prefix, budget)
+
+
+def reservar_llamada_llm() -> bool:
+    """True si esta llamada puede ir a Groq."""
+    return _reservar("llm", config.llm_daily_budget())
+
+
+def reservar_llamada_jina() -> bool:
+    """True si esta consulta puede pegarle a la API de embeddings."""
+    return _reservar("jina", config.jina_daily_budget())
 
 
 def note_groq_429() -> None:

@@ -1,3 +1,25 @@
 {
-  "manual-stella": "Manual STELLA"
+  "emails_publicos": [],
+  "proyectos": [
+    {
+      "id": "stella",
+      "nombre": "STELLA",
+      "descripcion": "ERP de gestión para laboratorios odontológicos.",
+      "url": null,
+      "aliases": ["stella", "manual stella"],
+      "preguntas": [
+        "¿Cómo agrego un cliente nuevo?",
+        "¿Cómo restauro un backup?",
+        "¿Cuánto es el descuento de clientes?"
+      ],
+      "documentos": [
+        {
+          "archivo": "manual-stella.md",
+          "titulo": "Manual STELLA",
+          "tipo": "manual",
+          "publico": true
+        }
+      ]
+    }
+  ]
 }

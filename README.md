@@ -1,9 +1,8 @@
 # Rag-Proyectos
 
-Asistente RAG multi-documento sobre la documentación de los proyectos del
-portafolio. Responde preguntas sobre el *manual de STELLA* con citas de página
-navegables; con el tiempo cada proyecto nuevo (SolutionsCars, Oak,
-Butterflies…) agrega su propio documento al corpus sin rediseñar nada.
+Asistente RAG sobre la documentación de los proyectos del portafolio
+(STELLA y los que se sumen). Cada cita indica proyecto, documento y sección;
+si el documento es público y hay PDF, el enlace abre la página.
 
 **En producción** (fases 0–7 completadas):
 
@@ -16,24 +15,26 @@ Butterflies…) agrega su propio documento al corpus sin rediseñar nada.
 ## Cómo funciona
 
 ```
-Pregunta → FAISS (embeddings ONNX locales) + BM25 → RRF → top-k
-         → gate anti-relleno (score BM25 < 2 → sin respuesta;
-           si nombra un documento del manifiesto y hay un término conocido,
-           pasa y prioriza la introducción)
+Pregunta → (filtro de proyecto) → FAISS + BM25 → RRF → top-k
+         → gate anti-relleno (score BM25 < 2 sobre el subconjunto → sin respuesta;
+           si nombra un documento y hay un término conocido, pasa y prioriza
+           la introducción; «¿Qué es X?» también la prioriza)
          → modo fragmentos (citas, 0 tokens)  ─┐
-         → modo sintética (respuesta Groq, top_k efectivo ≤ 5) ─┴→ UI con chips "p. N"
+         → modo sintética (respuesta Groq, top_k efectivo ≤ 5) ─┴→ UI
 ```
 
-- **Retrieval local**: BM25 corre siempre; el canal denso (FAISS +
-  `fastembed`, ONNX) es **opcional** y su modelo pesa ~640 MB descargados —
-  sin torch y sin llamadas externas, pero **no entra en un cold start de
-  Vercel de 60s**: en producción corre BM25 + gate (ver `RAG_DENSE`).
+- **Retrieval**: BM25 corre siempre. El canal denso usa el índice FAISS de
+  `jina-embeddings-v2-base-es` (768d). En una máquina de desarrollo los
+  vectores salen de fastembed (ONNX, ~640 MB). En Vercel no entra ese
+  archivo: `EMBEDDINGS_PROVIDER=api` pide el mismo modelo a Jina
+  (`JINA_API_KEY`, timeout 3 s). Si falta la key, hay 4xx/5xx, se agota
+  `JINA_DAILY_BUDGET` o se vence el timeout, la consulta sigue en BM25.
 - **Generación opcional**: si hay `LLM_API_KEY` (Groq, API compatible con
   OpenAI, con reintentos ante 5xx) redacta la respuesta con las citas; si no —
   o si falla — responde con los fragmentos crudos y sus páginas. El asistente
   **nunca queda roto**.
-- **Citas navegables**: cada respuesta muestra `📄 Manual STELLA, p. N` y la
-  UI abre `manual-stella.pdf#page=N`.
+- **Citas**: `Proyecto · Documento · Sección (pág. N)`. El enlace al PDF
+  solo aparece si el documento es público y tiene página.
 
 ## Stack
 
@@ -41,26 +42,26 @@ Pregunta → FAISS (embeddings ONNX locales) + BM25 → RRF → top-k
 |------|------------|
 | API | FastAPI + SSE (`/api/chat`), Swagger en `/docs` |
 | Retrieval | Híbrido: FAISS + BM25 + RRF (portado de `instructor-LSA`) |
-| Embeddings | `jinaai/jina-embeddings-v2-base-es` (768d) vía fastembed (ONNX) |
+| Embeddings | `jina-embeddings-v2-base-es` (768d): fastembed local o API de Jina |
 | Generación | Opcional: Groq (compatible OpenAI) por env vars `LLM_*` |
 | UI | React 19 + Vite 8 + oxlint (ES, sin TypeScript) |
-| Tests | pytest (73 passed, 1 skipped; gold set de 15 preguntas ES) |
+| Tests | pytest (89 passed, 1 skipped; gold_test de 10 preguntas ES) |
 | CI | GitHub Actions: pytest con `uv sync --frozen` + oxlint + build del cliente |
 | Deploy | Vercel: services `web` + `api` en un proyecto + proxy del portafolio |
 
 ## Estructura
 
 ```
-corpus/     fuentes y PDFs (manual-stella.pdf)
-data/       índice FAISS + chunks (commiteado, reindexable)
-scripts/    md2pdf + ingest (page-aware)
-rag/        motor: loader, chunker, embeddings, BM25, RRF, RAGService
-app/        FastAPI: /api/health, /api/chat (SSE), /api/search, rate limit
+corpus/     corpus/<proyecto>/*.(md|pdf) y manifiesto.json
+data/       índice FAISS, chunks, hash del corpus (commiteado)
+scripts/    md2pdf + ingest (markdown por encabezados, PDF por página)
+rag/        manifiesto, chunker, embeddings, BM25, RRF, guardrail
+app/        FastAPI: /api/health, /api/proyectos, /api/chat, /api/search
 api/        wrapper ASGI de Vercel (normaliza /asistente/api/*)
-tests/      pytest: API + retrieval (gold set)
-client/     React: chat con chips de cita, ES-only en v1
+tests/      pytest: API + retrieval (gold_test) + secretos + embeddings
+client/     React: selector de proyecto, markdown seguro, citas
 docs/       GIF del README
-.github/    CI
+.github/    CI y chequeo de corpus en PRs
 ```
 
 ## Desarrollo
@@ -79,28 +80,35 @@ npm run dev        # http://localhost:5173 (proxy /api -> :8000)
 uv run pytest
 ```
 
-## Agregar un documento nuevo
+## Sumar un proyecto
 
-El corpus es **repo-first**: los PDFs viven en `corpus/` y el índice viaja
-commiteado (el FS de Vercel es read-only, no hay upload en runtime).
+El corpus es **repo-first**: los archivos viven en `corpus/<proyecto>/` y el
+índice viaja commiteado (el FS de Vercel es read-only, no hay upload en runtime).
 
-1. Soltá el PDF en `corpus/` — el nombre del archivo es el `doc_id`
-   (`mi-proyecto.pdf` → `mi-proyecto`). Los que empiezan con `_` se ignoran.
-2. Opcional: agregá el título legible en `corpus/manifiesto.json`
-   (`{"mi-proyecto": "Proyecto X"}`); sin entrada se usa el nombre del archivo.
-3. Ingestá: `uv run python scripts/ingest.py`
-   (regenera `data/chunks.jsonl` + `data/index.faiss`; con el modelo ya en
-   caché tarda segundos). **No** comitees con `--sin-embed`: deja chunks e
-   índice desincronizados.
-4. Validá contra **todo** el corpus: `uv run pytest` y
-   `RUN_DENSE_TESTS=1 uv run pytest tests/test_gold.py` — el gold y los gates
-   anti-relleno cambian de score cuando cambian los idf.
-5. Commiteá juntos el PDF, `corpus/manifiesto.json`, `data/chunks.jsonl` e
-   `data/index.faiss`, y pusheá: el deploy se dispara solo.
+1. Creá `corpus/<id>/` y dejá ahí los `.md` o `.pdf`. Los que empiezan con `_`
+   se ignoran. Un `.md` puede tener al lado un `.pdf` con el mismo nombre: el
+   markdown se indexa y el PDF solo sirve para el enlace de página.
+2. Sumá el proyecto a `corpus/manifiesto.json`: `id`, `nombre`, `descripcion`,
+   `url` opcional, `aliases`, `preguntas`, y por documento `archivo`, `titulo`,
+   `tipo` (`manual`, `ficha`, `changelog` o `readme`) y `publico`.
+   Los emails que el documento puede mencionar van en `emails_publicos`.
+   La ingesta falla si falta un campo, si el archivo no está, o si el texto
+   tiene claves, tokens, `BEGIN PRIVATE KEY`, CUIT/CUIL, un email fuera de la
+   allowlist, o si el nombre del archivo dice «auditoría» o «vulnerabilidad».
+3. Si ya hay texto para evaluar, agregá casos con `proyecto` en
+   `data/gold_tuning.json` (para ajustar) y dejá `data/gold_test.json` para
+   medir. No uses el de tuning como resultado.
+4. Ingestá: `uv run python scripts/ingest.py`
+   (regenera `data/chunks.jsonl`, `data/index.faiss`, `data/corpus.sha256` y
+   `data/ingest_meta.json`). **No** comitees con `--sin-embed`.
+5. Validá: `uv run pytest` y, con el modelo local,
+   `RUN_DENSE_TESTS=1 uv run pytest tests/test_gold.py`.
+6. Commiteá juntos la carpeta, el manifiesto, los chunks, el índice, el hash
+   y la meta.
 
-Las citas `📄 <título>, p. N` del chat usan el título del manifiesto y el
-link al PDF (`/corpus/<doc_id>.pdf#page=N`) anda solo para documentos que el
-`prebuild` copió a `client/public/corpus/`.
+`uv run python scripts/ingest.py --check` no reindexa: valida el manifiesto,
+el guardrail y que el hash del corpus coincida con el de la última ingesta.
+En un PR que toque `corpus/` lo corre `.github/workflows/corpus.yml`.
 
 ## Variables de entorno
 
@@ -115,8 +123,11 @@ Ver `.env.example`:
 | `LLM_DAILY_BUDGET` | llamadas a Groq por día UTC (default `300`; `0` = ilimitado). Vacío en `.env` usa el default |
 | `UPSTASH_REDIS_REST_URL` | opcional. Base REST de Upstash. Si falta (o Redis falla) el rate limit y el cupo quedan en memoria |
 | `UPSTASH_REDIS_REST_TOKEN` | opcional. Token del REST. Nunca commiteado |
-| `RAG_DENSE` | `0` (default en Vercel) apaga el denso; `1` lo fuerza — pero jina-v2-es pesa ~640 MB y no baja en un cold start de 60s |
-| `FASTEMBED_CACHE_PATH` | caché de descarga del modelo (en Vercel, `rag/config.py` la fuerza a `/tmp`) |
+| `EMBEDDINGS_PROVIDER` | `local` (fastembed), `api` (Jina) u `off` (solo BM25). Si no está, `RAG_DENSE=0` apaga el denso; en Vercel sin ninguna de las dos el default es `api` |
+| `JINA_API_KEY` | key de `https://api.jina.ai/v1/embeddings` para `jina-embeddings-v2-base-es`. Nunca commiteada. Sin key, la consulta cae a BM25 |
+| `JINA_DAILY_BUDGET` | llamadas a Jina por día UTC (default `300`; `0` = ilimitado). Las consultas repetidas salen de un cache en memoria (500) y no consumen cupo |
+| `RAG_DENSE` | compatibilidad: `0` apaga el denso y `1` usa el modelo local, solo si `EMBEDDINGS_PROVIDER` no está definida |
+| `FASTEMBED_CACHE_PATH` | caché de descarga del modelo local (en Vercel, `rag/config.py` la fuerza a `/tmp`) |
 
 ## Deploy (Vercel)
 
@@ -138,13 +149,14 @@ Detalles que importan:
    no se aplicó; se resolvió en el wrapper, con tests).
 2. **uv en el build**: Vercel ejecuta `uv lock`, que exige `[project]` en
    `pyproject.toml`; `uv.lock` está commiteado.
-3. El `prebuild` de `client/` copia `corpus/*.pdf` a `client/public/corpus/`,
-   así las citas `#page=N` abren el PDF desde el CDN.
+3. El `prebuild` de `client/` copia los PDF de `corpus/` (incluso en
+   subcarpetas) a `client/public/corpus/`, así las citas `#page=N` abren el
+   PDF desde el CDN.
 4. Env vars en el dashboard **con scope Production** (las de Preview no
    aplican al dominio de producción): `LLM_API_KEY`, `LLM_BASE_URL`,
-   `LLM_MODEL` y `RAG_DENSE=0` (denso apagado: el modelo de 640 MB no baja
-   en el cold start; el híbrido queda para una máquina con caché o un
-   modelo cuantizado chico, ver roadmap).
+   `LLM_MODEL`, `EMBEDDINGS_PROVIDER=api` y `JINA_API_KEY`. Si quedó
+   `RAG_DENSE=0` de antes, `EMBEDDINGS_PROVIDER` lo pisa. Sin la key de Jina
+   el denso cae a BM25 y la consulta no se rompe.
 5. `/api/health` expone `status` (`ok`/`degraded`), `retrievable` (índice y
    chunks presentes), `llm` (key presente), `model`, `dense` y
    `dense_error` (último fallo del canal denso, con rutas saneadas), para
@@ -193,6 +205,12 @@ en memoria si no hay Redis. Al pasarse, `/api/chat` en modo sintética emite
 `fallback` con `reason=rate_limited` y no llama al proveedor. En sintética el
 `top_k` efectivo queda en 5 aunque el cliente pida más; `/api/search` sigue
 hasta 10.
+
+`JINA_DAILY_BUDGET` usa la misma idea con la clave `jina:budget:YYYY-MM-DD`.
+Si el cupo está agotado, falta `JINA_API_KEY`, Jina responde 4xx/5xx o tarda
+más de 3 s, la búsqueda sigue en BM25. El log anota el motivo (`sin_key`,
+`presupuesto`, `cuota`, `http_error`, `timeout`) y nunca la key. Un cache LRU
+de 500 consultas repetidas no vuelve a llamar a Jina.
 
 ## Roadmap
 

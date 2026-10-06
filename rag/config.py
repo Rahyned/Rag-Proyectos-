@@ -33,13 +33,34 @@ BM25_B = 0.75
 BM25_BIGRAM_BONUS = 1.5
 
 
-def dense_enabled() -> bool:
-    """¿Usar el canal denso (modelo + FAISS) en `search`?
+def embeddings_provider() -> str:
+    """`local` (fastembed), `api` (Jina) u `off` (solo BM25).
 
-    En Vercel arranca apagado (sin descarga de modelo en frío); `RAG_DENSE=1`
-    lo fuerza. Fuera de Vercel queda encendido por defecto.
+    `EMBEDDINGS_PROVIDER` gana. Si no está, `RAG_DENSE=0` apaga el denso y
+    `RAG_DENSE=1` usa el modelo local. En Vercel, sin ninguna de las dos,
+    el default es `api` (el ONNX de ~640 MB no entra en el cold start).
+    Fuera de Vercel el default es `local`.
     """
+    raw = os.getenv("EMBEDDINGS_PROVIDER", "").strip().lower()
+    if raw in ("local", "api", "off"):
+        return raw
     flag = os.environ.get("RAG_DENSE")
     if flag is not None:
-        return flag.strip().lower() not in ("0", "false", "no", "")
-    return os.environ.get("VERCEL") != "1"
+        apagado = flag.strip().lower() in ("0", "false", "no", "")
+        return "off" if apagado else "local"
+    if os.environ.get("VERCEL") == "1":
+        return "api"
+    return "local"
+
+
+def dense_enabled() -> bool:
+    """True si esta consulta va a intentar el canal denso (local o API)."""
+    return embeddings_provider() != "off"
+
+
+# Modelo servido por la API de Jina. Mismo espacio que el ONNX local si el
+# coseno de los mismos textos da ≥ 0.99; si no, el índice se rehace con la API.
+JINA_EMBED_MODEL = "jina-embeddings-v2-base-es"
+JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings"
+EMBED_TIMEOUT = 3.0
+EMBED_CACHE_SIZE = 500

@@ -1,0 +1,29 @@
+name: Corpus
+
+on:
+  pull_request:
+    paths:
+      - "corpus/**"
+      - "data/chunks.jsonl"
+      - "data/corpus.sha256"
+      - "data/ingest_meta.json"
+      - "scripts/ingest.py"
+      - "rag/manifiesto.py"
+      - "rag/secretos.py"
+      - "rag/chunking.py"
+
+jobs:
+  corpus:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      # Valida el manifiesto, el guardrail de secretos y que chunks.jsonl
+      # sigue al hash guardado en la ingesta. No descarga el modelo ni reindexa.
+      - run: uv run python scripts/ingest.py --check

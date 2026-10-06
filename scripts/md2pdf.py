@@ -12,9 +12,9 @@ from pathlib import Path
 import markdown
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "corpus" / "manual-stella.md"
-OUT = ROOT / "corpus" / "manual-stella.pdf"
-HTML = ROOT / "corpus" / "_manual-stella.html"
+SRC = ROOT / "corpus" / "stella" / "manual-stella.md"
+OUT = ROOT / "corpus" / "stella" / "manual-stella.pdf"
+HTML = ROOT / "corpus" / "stella" / "_manual-stella.html"
 
 CSS = """
 @page { size: A4; margin: 22mm 19mm; }
