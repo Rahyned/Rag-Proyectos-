@@ -3,6 +3,8 @@
 `api` usa el mismo modelo que el índice (`jina-embeddings-v2-base-es`).
 Si falta la key, se agota el cupo, la API responde 4xx/5xx o tarda más de
 3 s, `EmbedError` lleva solo el motivo: el retriever cae a BM25.
+Un timeout, un 5xx o un 429 abren una pausa de 10 minutos y el cupo
+diario solo baja cuando la llamada responde OK.
 """
 
 import logging
@@ -82,9 +84,12 @@ class JinaEmbeddings:
                 return guardado.reshape(1, -1).copy()
         if not app_config.jina_api_key():
             raise EmbedError("sin_key")
-        if not ratelimit.reservar_llamada_jina():
+        if ratelimit.jina_en_pausa():
+            raise EmbedError("circuito")
+        if not ratelimit.puede_llamar_jina():
             raise EmbedError("presupuesto")
         matriz = self._pedir([texto], EMBED_TIMEOUT)
+        ratelimit.anotar_llamada_jina()
         with self._lock:
             self._cache[texto] = matriz[0].copy()
             self._cache.move_to_end(texto)
@@ -93,9 +98,13 @@ class JinaEmbeddings:
         return matriz
 
     def _http(self) -> httpx.Client:
+        """Un solo cliente con keep-alive. El inyectado en tests no se reemplaza."""
         if self._client is not None:
             return self._client
-        return httpx.Client()
+        with self._lock:
+            if self._client is None:
+                self._client = httpx.Client()
+            return self._client
 
     def _pedir(self, textos: list[str], timeout: float) -> np.ndarray:
         key = app_config.jina_api_key()
@@ -106,7 +115,6 @@ class JinaEmbeddings:
             "input": textos,
             "normalized": True,
         }
-        propio = self._client is None
         client = self._http()
         try:
             resp = client.post(
@@ -120,17 +128,20 @@ class JinaEmbeddings:
         except EmbedError:
             raise
         except httpx.TimeoutException:
+            log.warning("jina no disponible: timeout")
+            ratelimit.abrir_pausa_jina()
             raise EmbedError("timeout") from None
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
+            log.warning("jina no disponible: status %s", code)
+            if code == 429 or code >= 500:
+                ratelimit.abrir_pausa_jina()
             if code in (402, 429):
                 raise EmbedError("cuota") from None
             raise EmbedError("http_error") from None
         except (httpx.HTTPError, ValueError):
+            log.warning("jina no disponible: http_error")
             raise EmbedError("http_error") from None
-        finally:
-            if propio:
-                client.close()
         data = cuerpo.get("data") if isinstance(cuerpo, dict) else None
         if not isinstance(data, list) or len(data) != len(textos):
             raise EmbedError("http_error")

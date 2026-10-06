@@ -27,8 +27,11 @@ Pregunta → (filtro de proyecto) → FAISS + BM25 → RRF → top-k
   `jina-embeddings-v2-base-es` (768d). En una máquina de desarrollo los
   vectores salen de fastembed (ONNX, ~640 MB). En Vercel no entra ese
   archivo: `EMBEDDINGS_PROVIDER=api` pide el mismo modelo a Jina
-  (`JINA_API_KEY`, timeout 3 s). Si falta la key, hay 4xx/5xx, se agota
-  `JINA_DAILY_BUDGET` o se vence el timeout, la consulta sigue en BM25.
+  (`JINA_API_KEY`, timeout 3 s, cliente HTTP reutilizado). Si falta la key,
+  hay un error, se agota `JINA_DAILY_BUDGET` o se vence el timeout, la
+  consulta sigue en BM25. Un timeout, un 5xx o un 429 pausan Jina 10 minutos
+  (en memoria y en Upstash, si está) y el cupo solo baja cuando la llamada
+  responde bien.
 - **Generación opcional**: si hay `LLM_API_KEY` (Groq, API compatible con
   OpenAI, con reintentos ante 5xx) redacta la respuesta con las citas; si no —
   o si falla — responde con los fragmentos crudos y sus páginas. El asistente
@@ -45,7 +48,7 @@ Pregunta → (filtro de proyecto) → FAISS + BM25 → RRF → top-k
 | Embeddings | `jina-embeddings-v2-base-es` (768d): fastembed local o API de Jina |
 | Generación | Opcional: Groq (compatible OpenAI) por env vars `LLM_*` |
 | UI | React 19 + Vite 8 + oxlint (ES, sin TypeScript) |
-| Tests | pytest (89 passed, 1 skipped; gold_test de 10 preguntas ES) |
+| Tests | pytest (105 passed, 1 skipped; gold_test de 10 preguntas ES) |
 | CI | GitHub Actions: pytest con `uv sync --frozen` + oxlint + build del cliente |
 | Deploy | Vercel: services `web` + `api` en un proyecto + proxy del portafolio |
 
@@ -110,6 +113,26 @@ El corpus es **repo-first**: los archivos viven en `corpus/<proyecto>/` y el
 el guardrail y que el hash del corpus coincida con el de la última ingesta.
 En un PR que toque `corpus/` lo corre `.github/workflows/corpus.yml`.
 
+## Índice local y API de Jina
+
+El índice commiteado se embebió con fastembed. Consulta y índice tienen que
+salir del mismo origen: si el coseno entre ambos baja de 0.99, reindexá con
+la API. Con `JINA_API_KEY` solo en el entorno (no en el repo):
+
+```powershell
+$env:JINA_API_KEY = "la-key"
+uv run python scripts/comparar_embeddings.py
+```
+
+El script imprime el coseno de tres frases y termina con error si el mínimo
+es menor que 0.99. En ese caso:
+
+```powershell
+uv run python scripts/ingest.py --provider api
+```
+
+y commiteá de nuevo `data/index.faiss` y `data/ingest_meta.json`.
+
 ## Variables de entorno
 
 Ver `.env.example`:
@@ -125,7 +148,7 @@ Ver `.env.example`:
 | `UPSTASH_REDIS_REST_TOKEN` | opcional. Token del REST. Nunca commiteado |
 | `EMBEDDINGS_PROVIDER` | `local` (fastembed), `api` (Jina) u `off` (solo BM25). Si no está, `RAG_DENSE=0` apaga el denso; en Vercel sin ninguna de las dos el default es `api` |
 | `JINA_API_KEY` | key de `https://api.jina.ai/v1/embeddings` para `jina-embeddings-v2-base-es`. Nunca commiteada. Sin key, la consulta cae a BM25 |
-| `JINA_DAILY_BUDGET` | llamadas a Jina por día UTC (default `300`; `0` = ilimitado). Las consultas repetidas salen de un cache en memoria (500) y no consumen cupo |
+| `JINA_DAILY_BUDGET` | llamadas a Jina por día UTC (default `300`; `0` = ilimitado). Solo se descuenta si la API responde OK. El cache (500) no consume cupo |
 | `RAG_DENSE` | compatibilidad: `0` apaga el denso y `1` usa el modelo local, solo si `EMBEDDINGS_PROVIDER` no está definida |
 | `FASTEMBED_CACHE_PATH` | caché de descarga del modelo local (en Vercel, `rag/config.py` la fuerza a `/tmp`) |
 
@@ -151,7 +174,8 @@ Detalles que importan:
    `pyproject.toml`; `uv.lock` está commiteado.
 3. El `prebuild` de `client/` copia los PDF de `corpus/` (incluso en
    subcarpetas) a `client/public/corpus/`, así las citas `#page=N` abren el
-   PDF desde el CDN.
+   PDF desde el CDN. El PDF viejo `/asistente/corpus/manual-stella.pdf`
+   redirige a `/asistente/corpus/stella/manual-stella.pdf`.
 4. Env vars en el dashboard **con scope Production** (las de Preview no
    aplican al dominio de producción): `LLM_API_KEY`, `LLM_BASE_URL`,
    `LLM_MODEL`, `EMBEDDINGS_PROVIDER=api` y `JINA_API_KEY`. Si quedó
@@ -206,10 +230,13 @@ en memoria si no hay Redis. Al pasarse, `/api/chat` en modo sintética emite
 `top_k` efectivo queda en 5 aunque el cliente pida más; `/api/search` sigue
 hasta 10.
 
-`JINA_DAILY_BUDGET` usa la misma idea con la clave `jina:budget:YYYY-MM-DD`.
-Si el cupo está agotado, falta `JINA_API_KEY`, Jina responde 4xx/5xx o tarda
-más de 3 s, la búsqueda sigue en BM25. El log anota el motivo (`sin_key`,
-`presupuesto`, `cuota`, `http_error`, `timeout`) y nunca la key. Un cache LRU
+`JINA_DAILY_BUDGET` usa la misma idea con la clave `jina:budget:YYYY-MM-DD`,
+pero el contador sube solo cuando Jina responde OK. Si el cupo está agotado,
+falta `JINA_API_KEY`, Jina responde mal o tarda más de 3 s, la búsqueda sigue
+en BM25. Un timeout, un 5xx o un 429 dejan la clave `jina:circuit` (o la
+pausa en memoria) por 10 minutos: la consulta siguiente no espera el timeout.
+El log anota el motivo (`sin_key`, `presupuesto`, `cuota`, `http_error`,
+`timeout`, `circuito`) y, si hubo HTTP, el status. Nunca la key. Un cache LRU
 de 500 consultas repetidas no vuelve a llamar a Jina.
 
 ## Roadmap

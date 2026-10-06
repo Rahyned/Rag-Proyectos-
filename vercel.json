@@ -48,6 +48,13 @@
       }
     }
   },
+  "redirects": [
+    {
+      "source": "/asistente/corpus/manual-stella.pdf",
+      "destination": "/asistente/corpus/stella/manual-stella.pdf",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/asistente/api/(.*)",

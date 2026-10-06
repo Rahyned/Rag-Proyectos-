@@ -61,7 +61,8 @@ class _ProyectoMixin(BaseModel):
         try:
             conocidos = ids_proyectos()
         except ManifiestoError as exc:
-            raise ValueError(str(exc)) from None
+            log.error("manifiesto inválido: %s", exc)
+            raise ValueError("configuración inválida") from None
         if v not in conocidos:
             raise ValueError(f"proyecto desconocido: {v}")
         return v
@@ -116,7 +117,10 @@ def proyectos():
     try:
         return {"proyectos": proyectos_publicos()}
     except ManifiestoError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from None
+        log.error("manifiesto inválido: %s", exc)
+        raise HTTPException(
+            status_code=503, detail="configuración inválida",
+        ) from None
 
 
 if (Path(CORPUS_DIR)).is_dir():

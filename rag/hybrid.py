@@ -40,8 +40,8 @@ mi tu es son al ya no si como cual cuando cuanto donde quien esta hay
 # ajenas (sin términos en el vocabulario) caen a 0. En «todos» el idf baja
 # cuando se sumen documentos, pero el gate no se sube: un umbral más alto
 # descartaría preguntas legítimas de un proyecto chico. El nombre del
-# proyecto o del documento, con algún término de df>0, sigue abriendo el
-# gate y prioriza la introducción.
+# proyecto o del documento no suma al puntaje del umbral ni cuenta como
+# el término de df>0 que abre el gate: hace falta otra palabra del manual.
 MIN_TOP1_SCORE = 2.0
 
 # Palabras del título que no identifican al documento ("Manual STELLA" → stella).
@@ -76,8 +76,11 @@ def tokenize(text: str) -> list[str]:
 
 def bm25_scores(query: str, tokens_per_doc: list[list[str]],
                 df: dict[str, int], n_docs: int,
-                k1: float = BM25_K1, b: float = BM25_B) -> np.ndarray:
+                k1: float = BM25_K1, b: float = BM25_B,
+                ignorar: set[str] | None = None) -> np.ndarray:
     q_tokens = tokenize(query)
+    if ignorar:
+        q_tokens = [t for t in q_tokens if t not in ignorar]
     # El original pesa 1.0; el sinónimo (dentista→odontólogo, etc.) pesa menos.
     ponderados = expandir(q_tokens)
     doc_lens = np.array([len(t) for t in tokens_per_doc], dtype=np.float32)
@@ -208,7 +211,8 @@ class HybridRetriever:
             [c.get("proyecto") == pid for c in self.chunks], dtype=bool
         )
 
-    def _lex(self, query: str, allowed: np.ndarray) -> np.ndarray:
+    def _lex(self, query: str, allowed: np.ndarray,
+             ignorar: set[str] | None = None) -> np.ndarray:
         """BM25 solo sobre el subconjunto: el idf no lo diluyen otros proyectos."""
         idx = np.flatnonzero(allowed)
         scores = np.zeros(self._n, dtype=np.float32)
@@ -219,7 +223,7 @@ class HybridRetriever:
         for toks in tokens:
             for t in set(toks):
                 df[t] = df.get(t, 0) + 1
-        sub = bm25_scores(query, tokens, df, len(tokens))
+        sub = bm25_scores(query, tokens, df, len(tokens), ignorar=ignorar)
         scores[idx] = sub
         return scores
 
@@ -245,7 +249,9 @@ class HybridRetriever:
         """
         allowed = self._mascara(proyecto, query)
         lex = self._lex(query, allowed)
-        top1 = float(lex.max()) if lex.size else 0.0
+        nombres = self._nombres_en(query)
+        lex_umbral = self._lex(query, allowed, ignorar=nombres) if nombres else lex
+        top1 = float(lex_umbral.max()) if lex_umbral.size else 0.0
         doc_id = self._doc_nombrado(query)
         if (
             doc_id
@@ -256,7 +262,11 @@ class HybridRetriever:
             # en casi todo el manual y el BM25 no la ponga primera.
             return self._hits_priorizando_intro(lex, top_k, doc_id)
         if top1 < MIN_TOP1_SCORE:
-            if doc_id and self._doc_en(doc_id, allowed) and self._tiene_termino(query, allowed):
+            if (
+                doc_id
+                and self._doc_en(doc_id, allowed)
+                and self._tiene_termino(query, allowed, ignorar=nombres)
+            ):
                 return self._hits_priorizando_intro(lex, top_k, doc_id)
             return []
         global LAST_DENSE_ERROR
@@ -273,7 +283,8 @@ class HybridRetriever:
                     "embeddings no disponible (%s); usando BM25", exc.motivo
                 )
                 # La descarga local no se reintenta (tardaría ~50s por consulta).
-                # Los fallos de la API sí: un timeout o un 429 pueden ser puntuales.
+                # Un timeout, 5xx o 429 de Jina abre una pausa: la consulta
+                # siguiente no vuelve a esperar el timeout.
                 if exc.motivo == "dimension" or type(self._embedder).__name__ == "LocalEmbeddings":
                     self._dense_error = exc.motivo
             except Exception as exc:  # noqa: BLE001 — degradar es lo correcto
@@ -326,12 +337,23 @@ class HybridRetriever:
             for i in range(self._n)
         )
 
-    def _tiene_termino(self, query: str, allowed: np.ndarray) -> bool:
+    def _nombres_en(self, query: str) -> set[str]:
+        """Tokens del documento o proyecto que la pregunta nombra."""
+        doc_id = self._doc_nombrado(query)
+        if not doc_id:
+            return set()
+        return set(_documentos().get(doc_id, {}).get("nombres", ()))
+
+    def _tiene_termino(self, query: str, allowed: np.ndarray,
+                       ignorar: set[str] | None = None) -> bool:
         df: dict[str, int] = {}
         for i in np.flatnonzero(allowed):
             for t in set(self._tokens_per_doc[int(i)]):
                 df[t] = df.get(t, 0) + 1
-        return any(df.get(t, 0) > 0 for t in tokenize(query))
+        fuera = ignorar or set()
+        return any(
+            df.get(t, 0) > 0 for t in tokenize(query) if t not in fuera
+        )
 
     def _indice_intro(self, doc_id: str) -> int | None:
         title = _documentos().get(doc_id, {}).get("title", "")

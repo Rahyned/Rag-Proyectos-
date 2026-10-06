@@ -31,6 +31,45 @@ def test_email_solo_si_esta_en_la_allowlist():
         revisar_texto("escribí a otro@laboratorio.test", "doc.md", ["hola@laboratorio.test"])
 
 
+@pytest.mark.parametrize("texto", [
+    "LLM_API_KEY=abcdefghijklmno1",
+    "JINA_API_KEY=abcdefghijklmno1",
+    "UPSTASH_REDIS_REST_TOKEN=abcdefghijklmno1",
+    "gsk_" + "a" * 20,
+    "jina_" + "b" * 20,
+    "sk-" + "c" * 20,
+    "sk-proj-" + "d" * 20,
+    "AIza" + "e" * 35,
+    "UPSTASH=" + "f" * 22,
+])
+def test_bloquea_claves_falsas(texto):
+    with pytest.raises(SecretosError, match="clave o un token"):
+        revisar_texto(texto, "doc.md", [])
+
+
+def test_el_corpus_actual_no_dispara_el_guardrail():
+    from pypdf import PdfReader
+
+    from rag.config import CORPUS_DIR
+    from rag.manifiesto import cargar
+
+    emails = cargar()["emails_publicos"]
+    archivos = [
+        p for p in CORPUS_DIR.rglob("*")
+        if p.is_file() and not p.name.startswith("_")
+    ]
+    assert archivos
+    for path in archivos:
+        revisar_nombre(path)
+        if path.suffix.lower() == ".md":
+            revisar_texto(path.read_text(encoding="utf-8"), path.name, emails)
+        elif path.suffix.lower() == ".pdf":
+            texto = "\n".join(
+                (pagina.extract_text() or "") for pagina in PdfReader(str(path)).pages
+            )
+            revisar_texto(texto, path.name, emails)
+
+
 def test_nombre_de_archivo_sensible():
     with pytest.raises(SecretosError, match="auditoria"):
         revisar_nombre(Path("informe-auditoría-interna.md"))
