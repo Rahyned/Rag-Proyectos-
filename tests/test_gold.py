@@ -12,8 +12,10 @@ import pytest
 from rag.config import GOLD_PATH, INDEX_PATH, TOP_K
 from rag.hybrid import HybridRetriever
 
-# Con el bonus de proximidad (BM25_BIGRAM_BONUS) ambos canales dan 12/12.
-MIN_BM25_TOP3 = 12
+# BM25: 12 del set original (bonus de bigrama) + 3 de la auditoría
+# (sinónimos y «¿Qué es STELLA?»), las tres también en el top3.
+# La híbrida mantiene el piso de 12: las nuevas no se revalidaron con el modelo.
+MIN_BM25_TOP3 = 15
 MIN_HYBRID_TOP3 = 12
 
 

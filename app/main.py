@@ -54,6 +54,11 @@ class ChatRequest(_QueryMixin):
     top_k: int = Field(default=5, ge=1, le=10)
 
 
+# La síntesis manda pocos fragmentos al LLM aunque el cliente pida más.
+# /api/search sigue aceptando hasta 10.
+_TOP_K_SINTETICA = 5
+
+
 def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
@@ -89,14 +94,17 @@ if (Path(CORPUS_DIR)).is_dir():
 
 @app.post("/api/search")
 def search(body: SearchRequest, request: Request):
-    ratelimit.check(request, ratelimit.SEARCH_LIMIT)
+    ratelimit.check(request, ratelimit.SEARCH_LIMIT, "search")
     return {"hits": _hits_or_503(body.query, body.top_k)}
 
 
 @app.post("/api/chat")
 def chat(body: ChatRequest, request: Request):
-    ratelimit.check(request, ratelimit.CHAT_LIMIT)
-    hits = _hits_or_503(body.query, body.top_k)
+    ratelimit.check(request, ratelimit.CHAT_LIMIT, "chat")
+    top_k = body.top_k
+    if body.mode == "sintetica":
+        top_k = min(top_k, _TOP_K_SINTETICA)
+    hits = _hits_or_503(body.query, top_k)
 
     def gen() -> Iterator[str]:
         try:

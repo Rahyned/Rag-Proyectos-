@@ -176,6 +176,8 @@ def test_circuito_429_no_llama_al_proveedor(monkeypatch):
         "".join(llm.stream_answer("hola", HITS))
     assert excinfo.value.reason == "rate_limited"
     assert len(calls) == 0
+    # El circuito corta antes de reservar cupo: no se incrementa el presupuesto.
+    assert llm.ratelimit._budget == {}
 
 
 def test_missing_key_reason(monkeypatch):
@@ -184,6 +186,94 @@ def test_missing_key_reason(monkeypatch):
     with pytest.raises(llm.LLMError) as excinfo:
         "".join(llm.stream_answer("hola", HITS))
     assert excinfo.value.reason == "no_key"
+
+
+def test_presupuesto_agotado_no_llama_al_proveedor(monkeypatch):
+    _env(monkeypatch)
+    monkeypatch.setenv("LLM_DAILY_BUDGET", "1")
+    calls = []
+    monkeypatch.setattr(llm.httpx, "stream", make_stream([(200, SSE_OK)], calls))
+    assert "".join(llm.stream_answer("hola", HITS)).startswith("Restaurá")
+    with pytest.raises(llm.LLMError) as excinfo:
+        "".join(llm.stream_answer("hola", HITS))
+    assert excinfo.value.reason == "rate_limited"
+    assert len(calls) == 1
+
+
+def test_sin_key_no_gasta_presupuesto(monkeypatch):
+    _env(monkeypatch)
+    monkeypatch.setenv("LLM_API_KEY", "")
+    monkeypatch.setenv("LLM_DAILY_BUDGET", "1")
+    with pytest.raises(llm.LLMError) as excinfo:
+        "".join(llm.stream_answer("hola", HITS))
+    assert excinfo.value.reason == "no_key"
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    calls = []
+    monkeypatch.setattr(llm.httpx, "stream", make_stream([(200, SSE_OK)], calls))
+    assert "".join(llm.stream_answer("hola", HITS)).startswith("Restaurá")
+    assert len(calls) == 1
+
+
+def test_presupuesto_redis_agotado_no_llama(monkeypatch):
+    _env(monkeypatch)
+    monkeypatch.setenv("LLM_DAILY_BUDGET", "300")
+    monkeypatch.setenv("UPSTASH_REDIS_REST_URL", "https://fake.upstash.io")
+    monkeypatch.setenv("UPSTASH_REDIS_REST_TOKEN", "token")
+    posts = []
+
+    def _post(url, json=None, **_k):
+        posts.append(json)
+        if json[0][0] == "DECR":
+            payload = [{"result": 300}]
+        else:
+            payload = [{"result": 301}, {"result": 1}]
+        return httpx.Response(
+            200, json=payload, request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(llm.ratelimit.httpx, "post", _post)
+    calls = []
+    monkeypatch.setattr(llm.httpx, "stream", make_stream([(200, SSE_OK)], calls))
+    with pytest.raises(llm.LLMError) as excinfo:
+        "".join(llm.stream_answer("hola", HITS))
+    assert excinfo.value.reason == "rate_limited"
+    assert calls == []
+    assert posts[0][0][0] == "INCR"
+    assert posts[0][0][1].startswith("llm:budget:")
+    assert posts[0][1] == ["EXPIRE", posts[0][0][1], 2 * 24 * 60 * 60]
+    assert posts[1][0][0] == "DECR"
+
+
+def test_presupuesto_redis_falla_usa_memoria(monkeypatch):
+    _env(monkeypatch)
+    monkeypatch.setenv("LLM_DAILY_BUDGET", "1")
+    monkeypatch.setenv("UPSTASH_REDIS_REST_URL", "https://fake.upstash.io")
+    monkeypatch.setenv("UPSTASH_REDIS_REST_TOKEN", "token")
+
+    def _post(*_a, **_k):
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(llm.ratelimit.httpx, "post", _post)
+    calls = []
+    monkeypatch.setattr(llm.httpx, "stream", make_stream([(200, SSE_OK)], calls))
+    assert "".join(llm.stream_answer("hola", HITS)).startswith("Restaurá")
+    with pytest.raises(llm.LLMError) as excinfo:
+        "".join(llm.stream_answer("hola", HITS))
+    assert excinfo.value.reason == "rate_limited"
+    assert len(calls) == 1
+
+
+def test_budget_vacio_o_invalido_usa_default(monkeypatch):
+    monkeypatch.delenv("LLM_DAILY_BUDGET", raising=False)
+    assert config.llm_daily_budget() == 300
+    monkeypatch.setenv("LLM_DAILY_BUDGET", "")
+    assert config.llm_daily_budget() == 300
+    monkeypatch.setenv("LLM_DAILY_BUDGET", "no")
+    assert config.llm_daily_budget() == 300
+    monkeypatch.setenv("LLM_DAILY_BUDGET", "0")
+    assert config.llm_daily_budget() == 0
+    monkeypatch.setenv("LLM_DAILY_BUDGET", "-4")
+    assert config.llm_daily_budget() == 300
 
 
 def test_timeout_invalido_usa_default(monkeypatch):
