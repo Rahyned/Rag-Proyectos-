@@ -10,5 +10,8 @@
   {"q": "¿Dónde veo los comprobantes impresos anteriores?", "doc_id": "manual-stella", "page": 29},
   {"q": "¿Cómo restablezco la contraseña de un usuario?", "doc_id": "manual-stella", "pages": [32, 33]},
   {"q": "La aplicación muestra un error, ¿qué hago?", "doc_id": "manual-stella", "page": 36},
-  {"q": "¿Cómo genero el informe mensual del laboratorio?", "doc_id": "manual-stella", "page": 14}
+  {"q": "¿Cómo genero el informe mensual del laboratorio?", "doc_id": "manual-stella", "page": 14},
+  {"q": "¿Qué es STELLA?", "doc_id": "manual-stella", "page": 4},
+  {"q": "¿Cómo hago una copia de seguridad?", "doc_id": "manual-stella", "page": 31},
+  {"q": "quiero cobrarle a un dentista", "doc_id": "manual-stella", "page": 26}
 ]

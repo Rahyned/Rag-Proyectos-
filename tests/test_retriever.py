@@ -4,7 +4,7 @@ import pytest
 
 from app.services import rag_service
 from rag.config import INDEX_PATH
-from rag.hybrid import HybridRetriever
+from rag.hybrid import HybridRetriever, tokenize
 
 
 def _retriever() -> HybridRetriever:
@@ -66,6 +66,39 @@ def test_enrich_snippet_sin_coincidencia_toma_la_cabecera():
     assert item["snippet"].startswith("texto del manual")
     assert item["snippet"].endswith("…")
     assert not item["snippet"].startswith("…")
+
+
+def test_que_es_stella_incluye_la_introduccion(monkeypatch):
+    """El nombre del documento abre el gate aunque el BM25 no llegue a 2."""
+    monkeypatch.setenv("RAG_DENSE", "0")
+    pages = [h["page"] for h in _retriever().search("¿Qué es STELLA?", 5)]
+    assert 4 in pages[:3]
+
+
+def test_copia_de_seguridad_trae_la_pagina_de_backups(monkeypatch):
+    monkeypatch.setenv("RAG_DENSE", "0")
+    pages = [h["page"] for h in _retriever().search(
+        "¿Cómo hago una copia de seguridad?", 5)]
+    assert 31 in pages[:3]
+
+
+def test_cobrarle_a_un_dentista_trae_cuentas_corrientes(monkeypatch):
+    """Pág. 26 abre «9. Cuentas corrientes»: debe, haber, saldo y el cobro."""
+    monkeypatch.setenv("RAG_DENSE", "0")
+    hits = _retriever().search("quiero cobrarle a un dentista", 5)
+    assert hits
+    assert 26 in [h["page"] for h in hits[:5]]
+
+
+def test_expandir_sinonimo_pesa_menos_que_el_original():
+    from rag.sinonimos import PESO_SINONIMO, expandir
+
+    pesos = dict(expandir(tokenize("dentista")))
+    assert pesos["dentist"] == 1.0
+    assert pesos["odontolog"] == PESO_SINONIMO
+    copia = dict(expandir(tokenize("¿Cómo hago una copia de seguridad?")))
+    assert copia["copi"] == 1.0
+    assert copia["backup"] == PESO_SINONIMO
 
 
 def test_search_real_agrega_snippet(monkeypatch):
