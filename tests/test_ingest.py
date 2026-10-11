@@ -12,12 +12,32 @@ from scripts.ingest import HASH_PATH, META_PATH, hash_corpus
 def test_manifiesto_real_lista_stella():
     limpiar_cache()
     data = cargar()
+    ids = [p["id"] for p in data["proyectos"]]
+    assert ids == [
+        "stella", "solutionscars", "laboratorio-riodent", "portafolio-web",
+    ]
+    assert data["emails_publicos"] == ["riodentlab@gmail.com"]
     stella = next(p for p in data["proyectos"] if p["id"] == "stella")
     assert stella["nombre"] == "STELLA"
     assert stella["documentos"][0]["titulo"] == "Manual STELLA"
     assert stella["documentos"][0]["tipo"] == "manual"
     assert stella["documentos"][0]["publico"] is True
     assert stella["preguntas"]
+    cars = next(p for p in data["proyectos"] if p["id"] == "solutionscars")
+    assert cars["nombre"] == "SolutionsCars"
+    assert cars["url"] is None
+    assert cars["documentos"][0]["tipo"] == "ficha"
+    assert cars["documentos"][0]["publico"] is True
+    assert len(cars["preguntas"]) == 3
+    riodent = next(p for p in data["proyectos"] if p["id"] == "laboratorio-riodent")
+    assert riodent["url"] == "https://www.riodent.com.ar"
+    assert riodent["documentos"][0]["tipo"] == "ficha"
+    assert len(riodent["preguntas"]) == 3
+    portafolio = next(p for p in data["proyectos"] if p["id"] == "portafolio-web")
+    assert portafolio["nombre"] == "portafolio-web"
+    assert portafolio["url"] == "https://portafolio-web-three-gamma.vercel.app"
+    assert portafolio["documentos"][0]["tipo"] == "ficha"
+    assert len(portafolio["preguntas"]) == 3
 
 
 def test_manifiesto_falta_campo(tmp_path):
