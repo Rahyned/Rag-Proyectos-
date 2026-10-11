@@ -223,4 +223,4 @@ def test_filtra_y_detecta_proyecto(monkeypatch, tmp_path):
     assert detectado and {h["proyecto"] for h in detectado} == {"stella"}
     cita = rag_service.enrich(solo, "cliente")[0]
     assert cita["url"] is None
-    assert cita["citation"] == "STELLA · STELLA · Clientes (pág. 1)"
+    assert cita["citation"] == "STELLA · Clientes (pág. 1)"

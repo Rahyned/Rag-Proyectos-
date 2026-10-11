@@ -1,11 +1,23 @@
 """Cita legible: Proyecto · Documento · Sección (pág. N)."""
 
+from rag.chunking import segmentos_sin_repetir
+
 
 def formatear_cita(hit: dict) -> str:
     proyecto = (hit.get("proyecto_nombre") or "").strip()
     documento = (hit.get("title") or "").strip()
     seccion = (hit.get("seccion") or "").strip()
-    partes = [p for p in (proyecto, documento, seccion) if p]
+    # Mismo criterio que la ruta del chunk: no repetir el nombre seguido.
+    planos = segmentos_sin_repetir([p for p in (proyecto, documento, seccion) if p])
+    partes: list[str] = []
+    resto = list(planos)
+    for slot in (proyecto, documento):
+        if resto and slot and resto[0] == slot:
+            partes.append(resto.pop(0))
+        elif resto and slot and " ".join(resto[0].split()).casefold() == " ".join(slot.split()).casefold():
+            partes.append(resto.pop(0))
+    if resto:
+        partes.append(" › ".join(resto))
     cita = " · ".join(partes) if partes else documento or "fuente"
     page = hit.get("page")
     if isinstance(page, int) and page > 0:

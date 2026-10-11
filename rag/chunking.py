@@ -270,11 +270,33 @@ def _secciones(texto: str) -> list[tuple[str, str]]:
     return out
 
 
+def _clave_segmento(texto: str) -> str:
+    return " ".join(texto.split()).casefold()
+
+
+def segmentos_sin_repetir(partes: list[str]) -> list[str]:
+    """Saca segmentos consecutivos iguales, ya partidos por « › ».
+
+    La comparación ignora mayúsculas y espacios de más. Una repetición que
+    no es consecutiva se conserva.
+    """
+    out: list[str] = []
+    for parte in partes:
+        for seg in parte.split(" › "):
+            seg = seg.strip()
+            if not seg:
+                continue
+            if out and _clave_segmento(out[-1]) == _clave_segmento(seg):
+                continue
+            out.append(seg)
+    return out
+
+
 def _prefijo(proyecto_nombre: str, title: str, seccion: str) -> str:
     partes = [proyecto_nombre, title]
     if seccion:
         partes.append(seccion)
-    return " › ".join(partes)
+    return " › ".join(segmentos_sin_repetir(partes))
 
 
 def chunk_markdown(texto: str, doc_id: str, title: str, *,
