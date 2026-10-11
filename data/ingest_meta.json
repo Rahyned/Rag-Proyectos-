@@ -1,6 +1,6 @@
 {
-  "corpus_sha256": "429f15c899f4f2843d5190d0f98cd70d348edee75d252f20d367edf407087be8",
-  "n_chunks": 113,
+  "corpus_sha256": "f88a797af27faa8326e0afa2aff43e237689c8a13b42f97c6ab50e2a301ae5af",
+  "n_chunks": 318,
   "embed_model": "jinaai/jina-embeddings-v2-base-es",
-  "origen": "local"
+  "origen": "api"
 }
