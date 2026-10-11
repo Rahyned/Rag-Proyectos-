@@ -38,6 +38,16 @@
     {"doc_id": "laboratorio-riodent", "section": "¿Sirve para facturar?"},
     {"doc_id": "portafolio-web", "section": "¿Sirve para facturar?"}
   ]},
+  {"q": "cuánto cuesta un sitio", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "section": "¿Cuánto sale?"},
+  {"q": "precio de una web", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "section": "¿Cuánto sale?"},
+  {"q": "quiero encargar un trabajo al laboratorio", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "¿Cómo hago un pedido?"},
+  {"q": "colorimetría", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "Pedir una toma de color en Laboratorio RioDent"},
+  {"q": "hacer un respaldo", "proyecto": "todos", "acepta": [
+    {"doc_id": "manual-stella", "page": 31},
+    {"doc_id": "solutionscars", "section": "Copias de seguridad y actualizaciones"},
+    {"doc_id": "solutionscars", "section": "¿Cómo hago una copia de seguridad?"}
+  ]},
+
   {"q": "¿Cómo hago una copia de seguridad?", "proyecto": "todos", "acepta": [
     {"doc_id": "manual-stella", "page": 31},
     {"doc_id": "solutionscars", "section": "¿Cómo hago una copia de seguridad?"}
