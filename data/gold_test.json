@@ -39,5 +39,15 @@
     {"doc_id": "solutionscars", "section": "Lista de precios"},
     {"doc_id": "manual-stella", "page": 18},
     {"doc_id": "portafolio-web", "section": "¿Cuánto sale?"}
+  ]},
+
+  {"q": "toma de color", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "Pedir una toma de color en Laboratorio RioDent"},
+  {"q": "cuánto sale una página web", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "section": "¿Cuánto sale?"},
+  {"q": "cómo hago un pedido al laboratorio", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "¿Cómo hago un pedido?"},
+  {"q": "qué tiene el portafolio", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "sections": ["¿Qué es esta página?", "¿Dónde veo los proyectos?"]},
+  {"q": "¿cómo hago una copia de seguridad?", "proyecto": "todos", "acepta": [
+    {"doc_id": "manual-stella", "page": 31},
+    {"doc_id": "solutionscars", "section": "Copias de seguridad y actualizaciones"},
+    {"doc_id": "solutionscars", "section": "¿Cómo hago una copia de seguridad?"}
   ]}
 ]

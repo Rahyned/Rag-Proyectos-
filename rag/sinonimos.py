@@ -18,14 +18,32 @@ PESO_SINONIMO = 0.5
 _REGLAS_CRUDAS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("dentista",), ("odontólogo",)),
     (
-        ("backup", "respaldo", "copia de seguridad"),
-        ("backup", "respaldo", "copia de seguridad"),
+        ("backup", "respaldo", "copia de seguridad", "copias"),
+        ("backup", "respaldo", "copia de seguridad", "copias"),
     ),
     (("cobrar",), ("cobro", "pago", "saldo")),
     (("dar de alta",), ("agregar", "crear")),
     (("contraseña", "clave"), ("contraseña", "clave")),
     (("borrar", "eliminar"), ("borrar", "eliminar")),
-    (("factura", "comprobante"), ("factura", "comprobante")),
+    (
+        ("factura", "facturar", "facturación", "afip", "arca", "comprobante"),
+        ("factura", "comprobante"),
+    ),
+    (
+        ("cuánto sale", "cuánto cuesta", "cuesta", "tarifa", "costo"),
+        ("precio", "presupuesto"),
+    ),
+    (("precio",), ("presupuesto",)),
+    (("presupuesto",), ("precio",)),
+    (
+        ("encargo", "encargar", "pedir un trabajo"),
+        ("pedido", "orden"),
+    ),
+    (("pedido",), ("orden",)),
+    (
+        ("colorimetría", "color dental", "tono"),
+        ("toma de color",),
+    ),
 )
 
 # Tokens de expansión más cortos que esto no aportan (el stem de "crear" cae

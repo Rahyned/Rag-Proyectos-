@@ -123,7 +123,7 @@ def construir_chunks() -> list:
 
 def escribir_chunks(chunks: list) -> None:
     DATA_DIR.mkdir(exist_ok=True)
-    with open(CHUNKS_PATH, "w", encoding="utf-8") as f:
+    with open(CHUNKS_PATH, "w", encoding="utf-8", newline="\n") as f:
         for chunk in chunks:
             f.write(json.dumps(chunk.to_dict(), ensure_ascii=False) + "\n")
     print(f"OK -> {CHUNKS_PATH} ({len(chunks)} chunks)")
@@ -131,13 +131,13 @@ def escribir_chunks(chunks: list) -> None:
 
 def escribir_meta(n_chunks: int, origen: str) -> None:
     digest = hash_corpus()
-    HASH_PATH.write_text(digest + "\n", encoding="utf-8")
+    HASH_PATH.write_text(digest + "\n", encoding="utf-8", newline="\n")
     META_PATH.write_text(json.dumps({
         "corpus_sha256": digest,
         "n_chunks": n_chunks,
         "embed_model": EMBED_MODEL,
         "origen": origen,
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 def chequear() -> None:

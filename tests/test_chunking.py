@@ -104,3 +104,53 @@ ok
     assert all(len(c.text.split("\n\n", 1)[-1]) >= MIN_CHUNK_CHARS or " › " in c.text
                for c in prosa)
     assert not any(c.text.strip() == "ok" for c in chunks)
+
+
+def test_prefijo_colapsa_el_nombre_repetido():
+    from rag.chunking import _prefijo
+
+    pref = _prefijo(
+        "Laboratorio RioDent",
+        "Laboratorio  RioDent",
+        "laboratorio riodent › Glosario › Brevo",
+    )
+    assert pref == "Laboratorio RioDent › Glosario › Brevo"
+
+
+def test_prefijo_de_stella_no_cambia():
+    from rag.chunking import _prefijo
+
+    pref = _prefijo(
+        "STELLA",
+        "Manual STELLA",
+        "1. Introducción › 1.1 ¿Qué es STELLA?",
+    )
+    assert pref == "STELLA › Manual STELLA › 1. Introducción › 1.1 ¿Qué es STELLA?"
+
+
+def test_prefijo_conserva_repeticion_no_consecutiva():
+    from rag.chunking import _prefijo
+
+    assert _prefijo("A", "B", "A › C") == "A › B › A › C"
+
+
+def test_seccion_del_chunk_no_se_deduplica():
+    from rag.chunking import anteponer_ruta, chunk_markdown
+
+    md = """# Laboratorio RioDent
+
+## Glosario
+
+### Brevo
+
+Brevo es el servicio de correo que usa el formulario de contacto del laboratorio para avisar un pedido nuevo.
+"""
+    chunks = chunk_markdown(
+        md, "laboratorio-riodent", "Laboratorio RioDent",
+        proyecto="laboratorio-riodent", proyecto_nombre="Laboratorio RioDent",
+        tipo="ficha", publico=True, pdf=None, url_publica=None,
+    )
+    assert chunks[0].seccion == "Laboratorio RioDent › Glosario › Brevo"
+    anteponer_ruta(chunks)
+    assert chunks[0].text.startswith("Laboratorio RioDent › Glosario › Brevo\n")
+    assert "Laboratorio RioDent › Laboratorio RioDent" not in chunks[0].text

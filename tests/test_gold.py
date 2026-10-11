@@ -25,9 +25,9 @@ PROYECTOS = {
 }
 
 # El set de medición (gold_test) no se usa para mover el umbral.
-# BM25: 24/26. Híbrida contra el índice de la API de Jina: 23/26.
+# BM25: 24/31. Híbrida contra el índice de la API de Jina: 27/31.
 MIN_BM25_TOP3 = 24
-MIN_HYBRID_TOP3 = 23
+MIN_HYBRID_TOP3 = 27
 
 
 def _gold() -> list[dict]:
@@ -77,11 +77,11 @@ def _specs(entry: dict) -> list[dict]:
     return [entry]
 
 
-def _acierto(hits: list[dict], entry: dict) -> bool:
+def _acierto(hits: list[dict], entry: dict, k: int = 3) -> bool:
     if entry.get("vacio"):
         return hits == []
     return any(
-        _hit_cubre(hit, spec) for hit in hits[:3] for spec in _specs(entry)
+        _hit_cubre(hit, spec) for hit in hits[:k] for spec in _specs(entry)
     )
 
 

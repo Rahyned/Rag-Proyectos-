@@ -133,6 +133,14 @@ def test_riodent_no_aparece_si_el_proyecto_es_stella(monkeypatch):
     assert all(h["doc_id"] != "laboratorio-riodent" for h in hits)
 
 
+def test_aceite_en_riodent_no_se_abre_por_un_sinonimo():
+    """«aceite» no dispara un sinónimo que meta vocabulario del laboratorio."""
+    from rag.sinonimos import expandir
+
+    pesos = dict(expandir(tokenize("¿cómo cambio el aceite del auto?")))
+    assert pesos == {"cambi": 1.0, "aceit": 1.0, "auto": 1.0}
+
+
 def test_detecta_alias_de_los_proyectos_nuevos():
     from rag.manifiesto import detectar_proyecto, limpiar_cache
 
@@ -171,6 +179,51 @@ def test_expandir_sinonimo_pesa_menos_que_el_original():
     copia = dict(expandir(tokenize("¿Cómo hago una copia de seguridad?")))
     assert copia["copi"] == 1.0
     assert copia["backup"] == PESO_SINONIMO
+
+
+def test_sinonimos_de_precio_pedido_color_y_factura():
+    from rag.sinonimos import PESO_SINONIMO, expandir
+
+    def pesos(q: str) -> dict[str, float]:
+        return dict(expandir(tokenize(q)))
+
+    sale = pesos("cuánto sale")
+    assert sale["sale"] == 1.0
+    assert sale["preci"] == PESO_SINONIMO
+    assert sale["presupuest"] == PESO_SINONIMO
+    assert pesos("cuánto cuesta")["preci"] == PESO_SINONIMO
+    assert pesos("tarifa")["presupuest"] == PESO_SINONIMO
+    assert pesos("precio")["presupuest"] == PESO_SINONIMO
+    assert pesos("presupuesto")["preci"] == PESO_SINONIMO
+    assert pesos("precio")["preci"] == 1.0
+
+    encargo = pesos("quiero encargar un trabajo")
+    assert encargo["orden"] == PESO_SINONIMO
+    assert "trabaj" not in encargo or encargo["trabaj"] == 1.0
+    assert pesos("pedido")["orden"] == PESO_SINONIMO
+    assert "ped" not in pesos("quiero encargar un trabajo")
+    copias = pesos("copias")
+    assert copias["copi"] == 1.0
+    assert copias["backup"] == PESO_SINONIMO
+
+    color = pesos("colorimetría")
+    assert color["toma"] == PESO_SINONIMO
+    assert color["color"] == PESO_SINONIMO
+    assert pesos("color dental")["toma"] == PESO_SINONIMO
+    assert pesos("tono")["color"] == PESO_SINONIMO
+
+    factura = pesos("facturar con afip")
+    assert factura["factur"] == 1.0
+    assert factura["comprobant"] == PESO_SINONIMO
+    assert pesos("facturación")["factur"] == PESO_SINONIMO
+    assert "cae" not in factura
+
+
+def test_agregar_un_cliente_no_se_reescribe():
+    from rag.sinonimos import expandir
+
+    pesos = dict(expandir(tokenize("agregar un cliente")))
+    assert pesos == {"agreg": 1.0, "client": 1.0}
 
 
 def test_search_real_agrega_snippet(monkeypatch):
@@ -223,4 +276,4 @@ def test_filtra_y_detecta_proyecto(monkeypatch, tmp_path):
     assert detectado and {h["proyecto"] for h in detectado} == {"stella"}
     cita = rag_service.enrich(solo, "cliente")[0]
     assert cita["url"] is None
-    assert cita["citation"] == "STELLA · STELLA · Clientes (pág. 1)"
+    assert cita["citation"] == "STELLA · Clientes (pág. 1)"
