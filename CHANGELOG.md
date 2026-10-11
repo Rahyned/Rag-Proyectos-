@@ -1,5 +1,73 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-11 — fix/ruta-y-sinonimos
+
+### Added
+
+- Cinco consultas que fallaron en producción, en `gold_test`, y cinco
+  variantes distintas en `gold_tuning` (precio, pedido, colorimetría y
+  respaldo). No comparten el texto de la pregunta.
+- `scripts/eval_gold.py` imprime hit@3 y hit@5 por proyecto, para BM25 y
+  para la híbrida, en tuning y en test, y las negativas que no vuelven
+  vacías. Sin `JINA_API_KEY` mide solo BM25.
+
+### Changed
+
+- La ruta del chunk y la cita colapsan segmentos consecutivos iguales
+  (sin distinguir mayúsculas ni espacios de más). `chunk.seccion` no se
+  toca. STELLA sigue «STELLA › Manual STELLA › …» porque esos nombres no
+  son el mismo.
+- Sinónimos de un solo sentido, peso 0.5: «cuánto sale / cuesta / tarifa /
+  costo» aporta precio y presupuesto; precio y presupuesto se apuntan
+  entre sí; encargo y «pedir un trabajo» aportan orden; pedido aporta
+  orden; colorimetría, color dental y tono aportan «toma de color»; la
+  regla de factura suma facturar, facturación, AFIP y ARCA. «copias»
+  entra en la regla de backup. El stem de «copias» es el de «copia».
+- Reingesta con la API de Jina: 316 chunks, dim 768, origen `api`.
+  STELLA 113, SolutionsCars 68, RioDent 65, portafolio-web 70. El hash
+  del corpus no cambió.
+- El umbral sigue en 2.0. De 1.0 a 2.25 el tuning no se mueve y no hay
+  falsos positivos. Desde 2.50 cae portafolio-web.
+
+### Fixed
+
+- La cita de una ficha ya no repite el nombre del proyecto cuando el
+  título y el H1 son el mismo texto.
+
+### Files
+
+- `rag/chunking.py`
+- `rag/citas.py`
+- `rag/sinonimos.py`
+- `scripts/eval_gold.py`
+- `scripts/ingest.py`
+- `tests/test_chunking.py`
+- `tests/test_retriever.py`
+- `tests/test_gold.py`
+- `data/gold_tuning.json`
+- `data/gold_test.json`
+- `data/chunks.jsonl`
+- `data/index.faiss`
+- `data/ingest_meta.json`
+
+### Tests
+
+`117 passed, 1 skipped`. Umbral del gate: 2.0.
+
+La línea base es solo BM25: en ese momento no había `JINA_API_KEY`.
+hit@3 por proyecto, antes y después.
+
+| proyecto | tuning BM25 | test BM25 | tuning híbrida | test híbrida |
+|---|---|---|---|---|
+| stella | 6/6 → 6/6 | 12/12 → 12/12 | — → 6/6 | — → 12/12 |
+| solutionscars | 4/5 → 4/5 | 3/4 → 3/4 | — → 5/5 | — → 3/4 |
+| laboratorio-riodent | 4/7 → 4/7 | 3/6 → 2/6 | — → 5/7 | — → 5/6 |
+| portafolio-web | 6/7 → 7/7 | 4/6 → 4/6 | — → 7/7 | — → 4/6 |
+| todos | 3/3 → 3/3 | 3/3 → 3/3 | — → 3/3 | — → 3/3 |
+
+`MIN_BM25_TOP3` queda en 24 y `MIN_HYBRID_TOP3` en 27, sobre 31 positivas
+de `gold_test`. Las negativas del gold siguen vacías.
+
 ## 2026-10-11 — feat/corpus-multiproyecto
 
 ### Added
