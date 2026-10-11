@@ -315,5 +315,7 @@ def test_proyectos_lista_stella():
     resp = client.get("/api/proyectos")
     assert resp.status_code == 200
     ids = [p["id"] for p in resp.json()["proyectos"]]
-    assert "stella" in ids
+    assert ids == [
+        "stella", "solutionscars", "laboratorio-riodent", "portafolio-web",
+    ]
     assert "emails_publicos" not in resp.text

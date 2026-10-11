@@ -16,11 +16,18 @@ def _retriever() -> HybridRetriever:
 
 
 def test_gate_bloquea_ajenas_al_manual(monkeypatch):
+    """Lo que no está en ningún documento no pasa. Argentina y el cine no salen de STELLA."""
     monkeypatch.setenv("RAG_DENSE", "0")
     retriever = _retriever()
-    for query in ("recetas de cocina italianas", "películas de terror",
-                  "economía argentina", "el hola man"):
+    for query in (
+        "recetas de cocina italianas",
+        "el hola man",
+        "¿cuál es la capital de Noruega?",
+    ):
         assert retriever.search(query, 5) == [], query
+    # «Argentina» y «películas» aparecen en portafolio-web. En STELLA siguen ajenas.
+    for query in ("economía argentina", "películas de terror"):
+        assert retriever.search(query, 5, proyecto="stella") == [], query
 
 
 def test_bm25_bigrama_adyacente_recibe_bonus():
@@ -72,17 +79,22 @@ def test_enrich_snippet_sin_coincidencia_toma_la_cabecera():
 
 
 def test_el_nombre_no_abre_el_gate(monkeypatch):
-    """«stella» solo no alcanza: hace falta otro término del manual."""
+    """El nombre del proyecto no alcanza: hace falta otro término del documento."""
     monkeypatch.setenv("RAG_DENSE", "0")
     retriever = _retriever()
-    assert retriever.search("stella quién ganó el oscar", 5) == []
+    for nombre in ("stella", "solutionscars", "solucars", "riodent", "portafolio"):
+        assert retriever.search(f"{nombre} quién ganó el oscar", 5) == [], nombre
     pages = [h["page"] for h in retriever.search("¿Qué es STELLA?", 5)]
     assert 4 in pages[:3]
     gold = json.loads(
         (INDEX_PATH.parent / "gold_test.json").read_text(encoding="utf-8")
     )
     for entry in gold:
-        hits = retriever.search(entry["q"], 5)
+        if entry.get("proyecto") != "stella" or entry.get("vacio"):
+            continue
+        if "page" not in entry and "pages" not in entry:
+            continue
+        hits = retriever.search(entry["q"], 5, proyecto=entry["proyecto"])
         esperadas = entry.get("pages") or [entry["page"]]
         assert any(h["page"] in esperadas for h in hits[:3]), entry["q"]
 
@@ -92,6 +104,47 @@ def test_que_es_stella_incluye_la_introduccion(monkeypatch):
     monkeypatch.setenv("RAG_DENSE", "0")
     pages = [h["page"] for h in _retriever().search("¿Qué es STELLA?", 5)]
     assert 4 in pages[:3]
+
+
+def test_que_es_funciona_en_los_cuatro(monkeypatch):
+    """«¿Qué es X?» responde en cada proyecto, no solo en STELLA."""
+    monkeypatch.setenv("RAG_DENSE", "0")
+    retriever = _retriever()
+    casos = (
+        ("¿Qué es STELLA?", "stella"),
+        ("¿Qué es SolutionsCars?", "solutionscars"),
+        ("¿Qué es Laboratorio RioDent?", "laboratorio-riodent"),
+        ("¿Qué es portafolio-web?", "portafolio-web"),
+    )
+    for consulta, proyecto in casos:
+        hits = retriever.search(consulta, 5)
+        assert hits, consulta
+        assert hits[0]["proyecto"] == proyecto, consulta
+        assert all(h["proyecto"] == proyecto for h in hits), consulta
+
+
+def test_riodent_no_aparece_si_el_proyecto_es_stella(monkeypatch):
+    """El filtro se aplica antes de rankear: un pedido de RioDent no sale de STELLA."""
+    monkeypatch.setenv("RAG_DENSE", "0")
+    hits = _retriever().search(
+        "¿cómo pido la toma de color?", 5, proyecto="stella",
+    )
+    assert all(h["proyecto"] == "stella" for h in hits)
+    assert all(h["doc_id"] != "laboratorio-riodent" for h in hits)
+
+
+def test_detecta_alias_de_los_proyectos_nuevos():
+    from rag.manifiesto import detectar_proyecto, limpiar_cache
+
+    limpiar_cache()
+    assert detectar_proyecto("¿qué onda con solucars?") == "solutionscars"
+    assert detectar_proyecto("en soluciones cars cómo facturo") == "solutionscars"
+    assert detectar_proyecto("el sistema del taller y la caja") == "solutionscars"
+    assert detectar_proyecto("en rio dent dónde queda") == "laboratorio-riodent"
+    assert detectar_proyecto("el laboratorio") == "laboratorio-riodent"
+    assert detectar_proyecto("mirá lautaro.dev") == "portafolio-web"
+    assert detectar_proyecto("la página de lautaro") == "portafolio-web"
+    assert detectar_proyecto("abrí el portafolio") == "portafolio-web"
 
 
 def test_copia_de_seguridad_trae_la_pagina_de_backups(monkeypatch):

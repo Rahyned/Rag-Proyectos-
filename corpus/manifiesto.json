@@ -1,5 +1,5 @@
 {
-  "emails_publicos": [],
+  "emails_publicos": ["riodentlab@gmail.com"],
   "proyectos": [
     {
       "id": "stella",
@@ -17,6 +17,66 @@
           "archivo": "manual-stella.md",
           "titulo": "Manual STELLA",
           "tipo": "manual",
+          "publico": true
+        }
+      ]
+    },
+    {
+      "id": "solutionscars",
+      "nombre": "SolutionsCars",
+      "descripcion": "Programa de escritorio para el día a día de un taller mecánico, un centro de GNC o un lubricentro.",
+      "url": null,
+      "aliases": ["solutionscars", "solucars", "soluciones cars", "sistema del taller"],
+      "preguntas": [
+        "¿Sirve para facturar?",
+        "¿Qué onda con la caja?",
+        "¿Cómo hago una copia de seguridad?"
+      ],
+      "documentos": [
+        {
+          "archivo": "solutionscars.md",
+          "titulo": "SolutionsCars",
+          "tipo": "ficha",
+          "publico": true
+        }
+      ]
+    },
+    {
+      "id": "laboratorio-riodent",
+      "nombre": "Laboratorio RioDent",
+      "descripcion": "Sitio web del laboratorio dental RioDent, en Rosario, para encargar prótesis y ver el catálogo.",
+      "url": "https://www.riodent.com.ar",
+      "aliases": ["riodent", "rio dent", "laboratorio riodent", "el laboratorio"],
+      "preguntas": [
+        "¿Cómo hago un pedido?",
+        "¿Cómo pido la toma de color?",
+        "¿Dónde queda el laboratorio?"
+      ],
+      "documentos": [
+        {
+          "archivo": "laboratorio-riodent.md",
+          "titulo": "Laboratorio RioDent",
+          "tipo": "ficha",
+          "publico": true
+        }
+      ]
+    },
+    {
+      "id": "portafolio-web",
+      "nombre": "portafolio-web",
+      "descripcion": "Sitio personal de Lautaro Rodriguez (LAUTARO.DEV) con proyectos, servicios y contacto.",
+      "url": "https://portafolio-web-three-gamma.vercel.app",
+      "aliases": ["portafolio", "portfolio", "lautaro.dev", "la página de lautaro"],
+      "preguntas": [
+        "¿Qué es esta página?",
+        "¿Cómo hago un pedido?",
+        "¿Hay videos?"
+      ],
+      "documentos": [
+        {
+          "archivo": "portafolio-web.md",
+          "titulo": "portafolio-web",
+          "tipo": "ficha",
           "publico": true
         }
       ]

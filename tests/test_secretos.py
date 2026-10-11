@@ -25,6 +25,25 @@ def test_rechaza_clave_privada_token_y_cuit():
         revisar_texto("el CUIT 20-12345678-3 no se publica", "doc.md", [])
 
 
+def test_riodentlab_esta_permitido_y_otro_email_no():
+    from rag.manifiesto import cargar, limpiar_cache
+
+    limpiar_cache()
+    emails = cargar()["emails_publicos"]
+    assert "riodentlab@gmail.com" in emails
+    revisar_texto(
+        "el correo es riodentlab@gmail.com",
+        "laboratorio-riodent.md",
+        emails,
+    )
+    with pytest.raises(SecretosError, match="email"):
+        revisar_texto(
+            "el correo es otro@gmail.com",
+            "laboratorio-riodent.md",
+            emails,
+        )
+
+
 def test_email_solo_si_esta_en_la_allowlist():
     revisar_texto("escribí a hola@laboratorio.test", "doc.md", ["hola@laboratorio.test"])
     with pytest.raises(SecretosError, match="email"):

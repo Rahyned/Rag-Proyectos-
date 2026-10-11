@@ -8,5 +8,36 @@
   {"q": "¿Dónde veo los comprobantes impresos anteriores?", "proyecto": "stella", "doc_id": "manual-stella", "page": 29},
   {"q": "¿Cómo restablezco la contraseña de un usuario?", "proyecto": "stella", "doc_id": "manual-stella", "pages": [32, 33]},
   {"q": "La aplicación muestra un error, ¿qué hago?", "proyecto": "stella", "doc_id": "manual-stella", "page": 36},
-  {"q": "¿Cómo genero el informe mensual del laboratorio?", "proyecto": "stella", "doc_id": "manual-stella", "page": 14}
+  {"q": "¿Cómo genero el informe mensual del laboratorio?", "proyecto": "stella", "doc_id": "manual-stella", "page": 14},
+  {"q": "en el manual stella ¿cómo cierro sesión?", "proyecto": "stella", "doc_id": "manual-stella", "page": 12},
+  {"q": "¿Qué roles de usuario tiene STELLA?", "proyecto": "stella", "doc_id": "manual-stella", "page": 9},
+
+  {"q": "¿cómo hago un pedido?", "proyecto": "solutionscars", "doc_id": "solutionscars", "section": "¿Cómo hago un pedido?"},
+  {"q": "¿de qué color se pone el stock que hay que reponer?", "proyecto": "solutionscars", "doc_id": "solutionscars", "section": "¿De qué color es el stock bajo?"},
+  {"q": "el sistema del taller ¿anda con AFIP?", "proyecto": "solutionscars", "doc_id": "solutionscars", "sections": ["¿Anda con AFIP?", "ARCA", "CAE"]},
+  {"q": "¿cómo hago una copia de seguridad del taller?", "proyecto": "solutionscars", "doc_id": "solutionscars", "section": "¿Cómo hago una copia de seguridad?"},
+
+  {"q": "¿cómo hago un pedido?", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "¿Cómo hago un pedido?"},
+  {"q": "el laboratorio ¿cómo pido la toma de color?", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "¿Cómo pido la toma de color?"},
+  {"q": "¿puedo adjuntar un archivo STL?", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "sections": ["¿Puedo adjuntar el escaneo?", "Orden de trabajo digital de Laboratorio RioDent"]},
+  {"q": "¿hay cadetería?", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "¿Hacen envíos o retiros?"},
+
+  {"q": "¿cómo hago un pedido?", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "section": "¿Cómo hago un pedido?"},
+  {"q": "en la página de lautaro ¿dónde está el CV?", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "sections": ["¿Dónde está el CV?", "Currículum imprimible"]},
+  {"q": "¿hay blog?", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "section": "¿Hay blog?"},
+  {"q": "¿dónde está la PC de almacenamiento?", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "section": "¿Dónde veo los proyectos?"},
+
+  {"q": "¿cómo encargo un trabajo?", "proyecto": "todos", "acepta": [
+    {"doc_id": "portafolio-web", "section": "¿Qué es esta página?"},
+    {"doc_id": "portafolio-web", "section": "¿Cómo hago un pedido?"},
+    {"doc_id": "laboratorio-riodent", "section": "Orden de trabajo"},
+    {"doc_id": "solutionscars", "section": "¿Cómo hago un pedido?"}
+  ]},
+  {"q": "¿hay una lista de precios?", "proyecto": "todos", "acepta": [
+    {"doc_id": "laboratorio-riodent", "section": "¿Qué onda con los precios?"},
+    {"doc_id": "solutionscars", "section": "¿Para qué sirve el inventario si ya tengo lista de precios?"},
+    {"doc_id": "solutionscars", "section": "Lista de precios"},
+    {"doc_id": "manual-stella", "page": 18},
+    {"doc_id": "portafolio-web", "section": "¿Cuánto sale?"}
+  ]}
 ]

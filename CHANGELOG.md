@@ -1,5 +1,70 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-11 — feat/corpus-multiproyecto
+
+### Added
+
+- Tres fichas en el corpus: SolutionsCars, Laboratorio RioDent
+  (`https://www.riodent.com.ar`) y portafolio-web
+  (`https://portafolio-web-three-gamma.vercel.app`), con alias y tres
+  preguntas de ejemplo cada una.
+- `riodentlab@gmail.com` en `emails_publicos`. Es el contacto público del
+  laboratorio.
+- Gold de ajuste y de medición para los cuatro proyectos, con preguntas
+  vagas, por alias, «¿Qué es X?», negativas y dos consultas con
+  `proyecto: todos`. El Markdown se evalúa por sección, no por página.
+
+### Changed
+
+- El índice se rehízo con la API de Jina (`jina-embeddings-v2-base-es`,
+  318 vectores, dim 768). STELLA 113, SolutionsCars 69, RioDent 66,
+  portafolio-web 70.
+- El umbral del gate sigue en 2.0. Entre 1.0 y 3.0 STELLA queda 6/6 y las
+  negativas del gold vuelven vacías. En 3.25 se cae «quiero cobrarle a un
+  dentista».
+- `MIN_BM25_TOP3` pasa a 24 y `MIN_HYBRID_TOP3` a 23, medidos en
+  `gold_test` (26 positivas).
+
+### Fixed
+
+- En la ficha de portafolio-web se sacó del historial el 8 y el 9 de
+  octubre de 2026, y «¿Hay videos?» responde solo que hoy no hay video
+  cargado. «5 de octubre» y «Slot» nombran el proyecto.
+- En SolutionsCars, la calidad queda descrita como una suite de tests
+  automáticos.
+
+### Files
+
+- `corpus/manifiesto.json`
+- `corpus/solutionscars/solutionscars.md`
+- `corpus/laboratorio-riodent/laboratorio-riodent.md`
+- `corpus/portafolio-web/portafolio-web.md`
+- `data/chunks.jsonl`, `data/index.faiss`, `data/corpus.sha256`,
+  `data/ingest_meta.json`
+- `data/gold_tuning.json`, `data/gold_test.json`
+- `tests/test_gold.py`, `tests/test_retriever.py`, `tests/test_ingest.py`,
+  `tests/test_api_rag.py`, `tests/test_secretos.py`
+- `CHANGELOG.md`
+
+### Tests
+
+110 passed, 1 skipped
+
+Gate sobre `gold_tuning`, de 1.00 a 3.00: STELLA 6/6, SolutionsCars 4/5,
+RioDent 4/5, portafolio-web 5/5, todos 2/2, falsos positivos 0. En 3.25
+STELLA baja a 5/6.
+
+Top-3 en `gold_test`:
+
+| Proyecto | BM25 | Híbrida |
+|---|---|---|
+| STELLA | 12/12 | 12/12 |
+| SolutionsCars | 3/4 | 3/4 |
+| RioDent | 3/4 | 3/4 |
+| portafolio-web | 4/4 | 3/4 |
+| todos | 2/2 | 2/2 |
+| Total | 24/26 | 23/26 |
+
 ## 2026-10-06 — fix/post-merge-2026-10-06
 
 ### Added
