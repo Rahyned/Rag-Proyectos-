@@ -7,6 +7,7 @@ Las negativas (vacio) no entran al conteo de top-3: se afirman aparte.
 
 import json
 import os
+import re
 
 import pytest
 
@@ -25,9 +26,9 @@ PROYECTOS = {
 }
 
 # El set de medición (gold_test) no se usa para mover el umbral.
-# BM25: 24/31. Híbrida contra el índice de la API de Jina: 27/31.
-MIN_BM25_TOP3 = 24
-MIN_HYBRID_TOP3 = 27
+# BM25: 36/45. Híbrida contra el índice de la API de Jina: 41/45.
+MIN_BM25_TOP3 = 36
+MIN_HYBRID_TOP3 = 41
 
 
 def _gold() -> list[dict]:
@@ -157,3 +158,41 @@ def test_index_matches_chunks():
     assert index.ntotal > 0
     assert index.d == 768
     assert meta["embed_model"] == EMBED_MODEL == "jinaai/jina-embeddings-v2-base-es"
+
+
+def test_las_secciones_del_gold_existen_como_encabezado():
+    """Cada section del gold es un encabezado del markdown de ese documento."""
+    from rag.manifiesto import cargar
+
+    titulos_por_doc: dict[str, set[str]] = {}
+    for proyecto in cargar()["proyectos"]:
+        for doc in proyecto["documentos"]:
+            path = doc["path"]
+            if path.suffix.lower() != ".md":
+                continue
+            titulos = set()
+            for linea in path.read_text(encoding="utf-8").splitlines():
+                match = re.match(r"^#{1,3}\s+(.+?)\s*$", linea)
+                if match:
+                    titulos.add(match.group(1).strip())
+            titulos_por_doc[path.stem] = titulos
+
+    faltan = []
+    for path in (GOLD_TUNING_PATH, GOLD_TEST_PATH):
+        for entry in _leer(path):
+            if entry.get("vacio"):
+                continue
+            for spec in _specs(entry):
+                doc_id = spec.get("doc_id") or entry.get("doc_id")
+                secciones = list(spec.get("sections") or [])
+                if spec.get("section"):
+                    secciones.append(spec["section"])
+                if not doc_id or not secciones:
+                    continue
+                titulos = titulos_por_doc.get(doc_id, set())
+                for seccion in secciones:
+                    if seccion not in titulos:
+                        faltan.append(
+                            f"{path.name}: {entry['q']!r} -> {doc_id} / {seccion}"
+                        )
+    assert not faltan, "\n".join(faltan)
