@@ -1,5 +1,66 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-13 — fix/gold-solutionscars
+
+### Changed
+
+- En «¿Sirve para facturar?» de SolutionsCars, el texto arranca con
+  las frases «¿sirve para facturar?», «¿factura con AFIP?» y «¿hace
+  facturas?».
+- Reingesta con la API de Jina: 454 chunks, dim 768, origen `api`.
+  STELLA 201, SolutionsCars 118, RioDent 65, portafolio-web 70.
+- `MIN_BM25_TOP3` sigue en 36 y `MIN_HYBRID_TOP3` en 41. El set de
+  medición pasa de 45 a 44 positivas. `MIN_TOP1_SCORE` sigue en 2.0.
+
+### Fixed
+
+- El gold de SolutionsCars ya no pregunta «¿cómo hago un pedido?».
+  El taller no tiene pedidos a proveedores. No pasó a las negativas:
+  la misma frase sigue en el gold de otros proyectos, y la sección
+  del documento todavía la responde, así que la búsqueda no vuelve
+  vacía.
+
+### Files
+
+- `corpus/solutionscars/solutionscars.md`
+- `data/gold_test.json`
+- `data/chunks.jsonl`
+- `data/index.faiss`
+- `data/corpus.sha256`
+- `data/ingest_meta.json`
+- `tests/test_gold.py`
+
+### Tests
+
+`118 passed, 1 skipped`. Umbral del gate: 2.0. Las negativas del gold
+siguen vacías.
+
+hit@3 por proyecto, antes y después.
+
+| proyecto | tuning BM25 | test BM25 | tuning híbrida | test híbrida |
+|---|---|---|---|---|
+| stella | 12/14 → 12/14 | 18/19 → 18/19 | 14/14 → 14/14 | 19/19 → 19/19 |
+| solutionscars | 9/13 → 10/13 | 9/11 → 9/10 | 13/13 → 13/13 | 10/11 → 10/10 |
+| laboratorio-riodent | 4/7 → 4/7 | 2/6 → 2/6 | 5/7 → 5/7 | 5/6 → 5/6 |
+| portafolio-web | 7/7 → 7/7 | 4/6 → 4/6 | 7/7 → 7/7 | 4/6 → 4/6 |
+| todos | 3/3 → 3/3 | 3/3 → 3/3 | 3/3 → 3/3 | 3/3 → 3/3 |
+| total | 35/44 → 36/44 | 36/45 → 36/44 | 42/44 → 42/44 | 41/45 → 41/44 |
+
+hit@5 por proyecto, antes y después.
+
+| proyecto | tuning BM25 | test BM25 | tuning híbrida | test híbrida |
+|---|---|---|---|---|
+| stella | 13/14 → 13/14 | 18/19 → 18/19 | 14/14 → 14/14 | 19/19 → 19/19 |
+| solutionscars | 9/13 → 10/13 | 10/11 → 10/10 | 13/13 → 13/13 | 10/11 → 10/10 |
+| laboratorio-riodent | 5/7 → 5/7 | 3/6 → 3/6 | 7/7 → 7/7 | 6/6 → 6/6 |
+| portafolio-web | 7/7 → 7/7 | 4/6 → 4/6 | 7/7 → 7/7 | 5/6 → 5/6 |
+| todos | 3/3 → 3/3 | 3/3 → 3/3 | 3/3 → 3/3 | 3/3 → 3/3 |
+| total | 37/44 → 38/44 | 38/45 → 38/44 | 44/44 → 44/44 | 43/45 → 43/44 |
+
+Ningún caso que antes acertaba en hit@3 dejó de acertar. «¿sirve para
+facturar?» (SolutionsCars, tuning) pasa a acertar también en BM25. El
+top-1 es «¿Sirve para facturar?».
+
 ## 2026-10-12 — feat/guias-uso
 
 ### Added

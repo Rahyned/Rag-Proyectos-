@@ -26,7 +26,7 @@ PROYECTOS = {
 }
 
 # El set de medición (gold_test) no se usa para mover el umbral.
-# BM25: 36/45. Híbrida contra el índice de la API de Jina: 41/45.
+# BM25: 36/44. Híbrida contra el índice de la API de Jina: 41/44.
 MIN_BM25_TOP3 = 36
 MIN_HYBRID_TOP3 = 41
 

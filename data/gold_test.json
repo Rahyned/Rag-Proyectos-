@@ -19,7 +19,6 @@
   {"q": "Me dice que el servidor no está", "proyecto": "stella", "doc_id": "manual-stella", "section": "Me dice que el servidor no está"},
   {"q": "¿Cómo registro que me pagaron?", "proyecto": "stella", "doc_id": "manual-stella", "section": "Cómo registro un cobro en STELLA"},
 
-  {"q": "¿cómo hago un pedido?", "proyecto": "solutionscars", "doc_id": "solutionscars", "section": "¿Cómo hago un pedido?"},
   {"q": "¿de qué color se pone el stock que hay que reponer?", "proyecto": "solutionscars", "doc_id": "solutionscars", "section": "¿De qué color es el stock bajo?"},
   {"q": "el sistema del taller ¿anda con AFIP?", "proyecto": "solutionscars", "doc_id": "solutionscars", "sections": ["¿Anda con AFIP?", "ARCA", "CAE"]},
   {"q": "¿cómo hago una copia de seguridad del taller?", "proyecto": "solutionscars", "doc_id": "solutionscars", "section": "¿Cómo hago una copia de seguridad?"},
