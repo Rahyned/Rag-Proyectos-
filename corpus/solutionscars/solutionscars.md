@@ -488,7 +488,7 @@ SolutionsCars es un programa de escritorio para talleres mecánicos, GNC y lubri
 
 ### ¿Sirve para facturar?
 
-Sí. SolutionsCars hace presupuestos, remitos, factura A y factura B. Las facturas A y B pueden autorizarse de forma electrónica. Presupuesto y remito no son facturas fiscales.
+También se pregunta como: ¿sirve para facturar?, ¿factura con AFIP?, ¿hace facturas?. Sí. SolutionsCars hace presupuestos, remitos, factura A y factura B. Las facturas A y B pueden autorizarse de forma electrónica. Presupuesto y remito no son facturas fiscales.
 
 ### ¿Cómo hago un pedido?
 
