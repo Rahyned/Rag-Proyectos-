@@ -1,5 +1,90 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-12 — feat/guias-uso
+
+### Added
+
+- Guía de uso diario en el manual de STELLA y en la ficha de
+  SolutionsCars: tareas paso a paso, problemas comunes y preguntas
+  frecuentes.
+- Treinta preguntas nuevas en el gold, todas con filtro de proyecto.
+  Ocho van a tuning y siete a test, por proyecto. Si la misma pregunta
+  se repite en dos proyectos, las dos filas quedan en el mismo archivo.
+- Un test comprueba que cada sección citada por el gold existe como
+  encabezado del markdown de ese documento.
+
+### Changed
+
+- En el manual de STELLA se quitaron detalles internos de mantenimiento
+  y de sesión.
+- El PDF del manual queda en 59 páginas.
+- `scripts/md2pdf.py` imprime con un perfil temporal de Edge para que
+  el PDF se escriba aunque el navegador ya esté abierto.
+- Reingesta con la API de Jina: 454 chunks, dim 768, origen `api`,
+  modelo `jinaai/jina-embeddings-v2-base-es`. STELLA 201, SolutionsCars
+  118, RioDent 65, portafolio-web 70.
+- `MIN_BM25_TOP3` pasa de 24 a 36 y `MIN_HYBRID_TOP3` de 27 a 41, sobre
+  45 positivas de `gold_test`. `MIN_TOP1_SCORE` sigue en 2.0.
+- El gold de métodos de pago apunta a la página 27: esa sección se
+  corrió una página en el PDF nuevo.
+
+### Fixed
+
+- Donde dos secciones decían lo mismo, quedó una sola, con el
+  encabezado que espera el gold. Donde no había duplicado, la sección
+  esperada incluye la frase con la que pregunta el usuario.
+
+### Files
+
+- `corpus/stella/manual-stella.md`
+- `corpus/stella/manual-stella.pdf`
+- `corpus/solutionscars/solutionscars.md`
+- `scripts/md2pdf.py`
+- `data/chunks.jsonl`
+- `data/index.faiss`
+- `data/corpus.sha256`
+- `data/ingest_meta.json`
+- `data/gold_tuning.json`
+- `data/gold_test.json`
+- `tests/test_gold.py`
+
+### Tests
+
+`118 passed, 1 skipped`. Umbral del gate: 2.0. Las negativas del gold
+siguen vacías.
+
+hit@3 por proyecto, antes y después. El después suma las 30 preguntas
+nuevas.
+
+| proyecto | tuning BM25 | test BM25 | tuning híbrida | test híbrida |
+|---|---|---|---|---|
+| stella | 6/6 → 12/14 | 12/12 → 18/19 | 6/6 → 14/14 | 12/12 → 19/19 |
+| solutionscars | 4/5 → 9/13 | 3/4 → 9/11 | 5/5 → 13/13 | 3/4 → 10/11 |
+| laboratorio-riodent | 4/7 → 4/7 | 2/6 → 2/6 | 5/7 → 5/7 | 5/6 → 5/6 |
+| portafolio-web | 7/7 → 7/7 | 4/6 → 4/6 | 7/7 → 7/7 | 4/6 → 4/6 |
+| todos | 3/3 → 3/3 | 3/3 → 3/3 | 3/3 → 3/3 | 3/3 → 3/3 |
+| total | 24/28 → 35/44 | 24/31 → 36/45 | 26/28 → 42/44 | 27/31 → 41/45 |
+
+hit@5 por proyecto, antes y después.
+
+| proyecto | tuning BM25 | test BM25 | tuning híbrida | test híbrida |
+|---|---|---|---|---|
+| stella | 6/6 → 13/14 | 12/12 → 18/19 | 6/6 → 14/14 | 12/12 → 19/19 |
+| solutionscars | 5/5 → 9/13 | 3/4 → 10/11 | 5/5 → 13/13 | 3/4 → 10/11 |
+| laboratorio-riodent | 5/7 → 5/7 | 3/6 → 3/6 | 7/7 → 7/7 | 6/6 → 6/6 |
+| portafolio-web | 7/7 → 7/7 | 4/6 → 4/6 | 7/7 → 7/7 | 5/6 → 5/6 |
+| todos | 3/3 → 3/3 | 3/3 → 3/3 | 3/3 → 3/3 | 3/3 → 3/3 |
+| total | 26/28 → 37/44 | 25/31 → 38/45 | 28/28 → 44/44 | 29/31 → 43/45 |
+
+Pendientes, las dos ya fallaban en el índice anterior:
+
+- «¿sirve para facturar?» (SolutionsCars, tuning) no tiene hit@3 en
+  BM25. El top-1 es «¿Puedo imprimir sin guardar?». La híbrida acierta,
+  con top-1 «¿Sirve para facturar?».
+- «¿cómo hago un pedido?» (SolutionsCars, test) no tiene hit@3 en BM25
+  ni en la híbrida. El top-1 de BM25 es «¿Olvidé la contraseña, qué
+  hago?». El de la híbrida es «Cómo recibo un auto en SolutionsCars».
+
 ## 2026-10-11 — fix/ruta-y-sinonimos
 
 ### Added

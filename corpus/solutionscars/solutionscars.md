@@ -100,14 +100,6 @@ Desde el mismo lugar se busca si hay una versión nueva. Si el administrador ace
 3. Para reponer o corregir, usar el lápiz de la fila. Para sacar un producto del uso diario, el tacho lo manda a la papelera.
 4. Ajustar precios elige categoría o búsqueda, los productos, si sube o baja, y el porcentaje.
 
-### Recibir un vehículo
-
-1. En Recepción de SolutionsCars elegir cliente y vehículo.
-2. Anotar kilometraje y el trabajo.
-3. Ir marcando cada ítem de la inspección (un toque: bien; otro: requiere atención; otro: sin revisar) y los niveles de líquidos.
-4. Generar el comprobante PDF y elegir dónde guardarlo.
-5. En Comprobantes generados, pasar la orden de pendiente a en proceso y después a completado.
-
 ### Hacer un presupuesto o una factura
 
 1. Entrar a Facturación en SolutionsCars con el código de acceso.
@@ -117,26 +109,322 @@ Desde el mismo lugar se busca si hay una versión nueva. Si el administrador ace
 5. Imprimir si solo hay que mostrarlo. Guardar cuando el comprobante tiene que quedar registrado. En factura A o B, Guardar es el paso que descuenta stock y busca la autorización fiscal.
 6. En Historial, filtrar el período para ver totales.
 
-### Cerrar la caja
-
-1. En Facturación de SolutionsCars abrir la pestaña Caja.
-2. Si no hay planilla del día, abrirla.
-3. Cargar ingresos y egresos a medida que ocurren.
-4. Al terminar la jornada, cerrar la planilla y confirmar el resumen.
-5. Los movimientos también se consultan con filtro de medio de pago, tipo y fechas.
-
-### Avisar un vencimiento
-
-1. Abrir Vencimientos en SolutionsCars.
-2. Revisar vencidos y los que caen pronto.
-3. Usar WhatsApp o el correo de la tarjeta. El mensaje ya incluye el trámite, el vehículo y los días.
-4. Si hace falta más o menos anticipación, el administrador lo cambia en Configuración, en alertas.
-
 ### Sacar un balance
 
 1. En Reportes de SolutionsCars elegir día, mes o año y calcular.
 2. Exportar el balance, el inventario o los clientes a Excel.
 3. El archivo queda en la carpeta de documentos del programa.
+
+## Tareas paso a paso
+
+### Cómo entro a SolutionsCars
+
+1. Abrí SolutionsCars. A un lado está el logo y al otro los campos Usuario y Contraseña. El candado deja ver la clave.
+2. Tocá Iniciar Sesión.
+3. Si la cuenta debe renovar la clave, el cuadro Cambio de contraseña obligatorio pide Nueva contraseña y Confirmar contraseña. Tocá Guardar. Si no coinciden, dice Las contraseñas no coinciden.
+
+Resultado: se abre Inicio, con tarjetas a los módulos. El menú lleva a Inicio, Clientes y Vehículos, Inventario, Lista de Precios, Recepción, Facturación, Vencimientos, Reportes y Configuración.
+
+Nota: si faltan los dos campos, el aviso es Usuario y contraseña son requeridos. Si no coinciden, Usuario o contraseña incorrectos. Si insiste, puede decir Demasiados intentos y cuántos segundos esperar. SolutionsCars no publica usuario ni clave de fábrica.
+
+### Cómo agrego un cliente en SolutionsCars
+
+1. Abrí Clientes y Vehículos. La pestaña Clientes está primero.
+2. Completá Nombre. También están Teléfono, Email, Dirección, DNI / CUIL y Condición frente al IVA.
+3. Tocá Guardar cliente.
+
+Resultado: el cliente queda en la lista de abajo. Si no hay ninguno, dice Sin clientes registrados.
+
+Nota: Limpiar vacía el formulario sin guardar. Para sacarlo de la lista, SolutionsCars pregunta ¿Eliminar a …? y ofrece Cancelar o Eliminar. No se borra si todavía tiene vehículos o comprobantes asociados.
+
+### Cómo cargo un vehículo en SolutionsCars
+
+1. En Clientes y Vehículos de SolutionsCars, pasá a la pestaña Vehículos.
+2. En Cliente escribí o elegí una sugerencia. El vehículo pide un cliente.
+3. Completá Dominio, Marca, Modelo, Año y Kilometraje. Si corresponde, N° Cilindros, N° Motor, N° Regulador, N° Chasis, Vto. Oblea y Vto. P.H. Las fechas van dd/mm/aaaa.
+4. Tocá Guardar vehículo.
+
+Resultado: la tabla muestra dominio, marca/modelo, cliente y los vencimientos.
+
+Nota: el kilometraje tiene que ser un número entero. Si es menor al que ya tenía ese auto, dice El kilometraje no puede ser menor al último registrado. Borrar pregunta ¿Eliminar el vehículo …? y avisa que no se puede deshacer.
+
+### Cómo agrego un proveedor en SolutionsCars
+
+1. En Clientes y Vehículos, abrí la pestaña Proveedores.
+2. Completá Nombre y Alias. Teléfono, Email y Dirección son el resto del formulario.
+3. Tocá Guardar proveedor.
+
+Resultado: aparece en Proveedores registrados. Si la lista está vacía, dice Sin proveedores registrados.
+
+Nota: el nombre y el alias son los datos que el formulario marca para el alta. Eliminar pregunta ¿Eliminar a …?.
+
+### Cómo doy de alta un repuesto en SolutionsCars
+
+1. Entrá a Inventario. El cuadro se llama Acceso a Inventario y dice Ingrese su código de acceso. El campo es Código. Tocá Aceptar.
+2. Completá SKU, Descripción, Categoría, Cantidad, Stock Mín., P. Costo, P. Venta, Proveedor y Transporte.
+3. Tocá Guardar producto.
+
+Resultado: el producto entra a la lista. El color marca el stock: verde normal, naranja se está acabando, rojo hay que reponer.
+
+Nota: si el código está vacío, el campo dice Ingrese su código. Si no sirve, Código inválido. El mismo cuadro de inventario abre también Lista de Precios. El precio de costo queda detrás de ese código.
+
+### Cómo ajusto precios del inventario en SolutionsCars
+
+1. En Inventario, abrí el ajuste de precios.
+2. Elegí Categoría o escribí en Buscar producto.
+3. Marcá los productos, o Seleccionar todos.
+4. Completá Porcentaje (el ejemplo de la pantalla es 15) y Tipo de ajuste.
+5. Tocá Aplicar Ajuste. Cancelar cierra sin cambiar.
+
+Resultado: esos precios de venta se mueven el porcentaje elegido.
+
+Nota: sacar un producto del uso diario abre Mover a papelera y pregunta si moverlo. Desde la papelera se puede Restaurar. Vaciar papelera avisa que no se podrán recuperar.
+
+### Cómo armo un precio de trabajo en SolutionsCars
+
+1. Abrí Lista de Precios. Pide el mismo acceso que Inventario: Acceso a Inventario y el Código.
+2. Elegí la sección en Filtrar por sección, o cargá una nueva: Agregar seccion pide Nombre de la seccion y Columnas separadas por coma. El ejemplo de columnas es PRODUCTO, PUBLICO, CONCESIONARIA.
+3. Guardá la fila del trabajo con su precio.
+4. Para papel, Guardar PDF de esa sección.
+
+Resultado: la lista de trabajos queda aparte del stock. Borrar un repuesto del inventario no vacía estas secciones.
+
+Nota: Limpiar lista pregunta ¿Borrar todos los productos de todas las secciones?. La papelera de esta lista también se puede vaciar, y ese vaciado no se recupera.
+
+### Cómo recibo un auto en SolutionsCars
+
+También se pregunta como: ¿Cómo recibo un auto? En SolutionsCars el auto entra por Recepción, no por un pedido de tienda.
+
+1. Abrí Recepción. La pestaña Nuevo Comprobante es la del ingreso.
+2. Elegí Cliente y Vehículo. El vehículo es obligatorio.
+3. Anotá Kilometraje y Descripción del trabajo.
+4. Marcá la inspección. Cada toque pasa el ítem de estado.
+5. Tocá Generar comprobante PDF y en Guardar comprobante como… elegí dónde dejarlo.
+
+Resultado: queda la orden y el PDF. En Comprobantes Generados se busca por cliente, vehículo o fecha (DD/MM/YYYY), se ve el detalle y se puede Regenerar PDF.
+
+Nota: si el kilometraje no es un entero, dice El kilometraje debe ser un número entero válido. Si es más bajo que el anterior, no deja guardarlo. El estado de la orden se cambia desde el comprobante: pendiente, en proceso, completado o cancelado. Cancelar pide Confirmar Cancelación.
+
+### Cómo hago un presupuesto en SolutionsCars
+
+1. Abrí Facturación. El cuadro Acceso a Facturación pide el código. Aceptar entra; Código inválido no.
+2. En Tipo Documento elegí Presupuesto.
+3. Elegí Cliente. Vehículo es opcional. Completá Método de pago y Atendido por.
+4. En Producto escribí un SKU o una descripción del inventario, o un ítem a mano con Cant. y P. Unit. Categoría puede ser repuestos, GNC, reparaciones o lubricentro.
+5. Imprimir arma el PDF para mostrarlo. Guardar lo deja registrado.
+
+Resultado: el presupuesto no lleva IVA y no pide autorización fiscal. Imprimir no guarda ni autoriza.
+
+Nota: si el precio del ítem es cero, SolutionsCars avisa Precio en cero y ofrece Cargar precio o Agregar con $0.
+
+### Cómo hago una factura B en SolutionsCars
+
+1. En Facturación de SolutionsCars, con el código aceptado, elegí Factura B en Tipo Documento.
+2. Elegí el cliente. La condición frente al IVA sale de la ficha. DNI / CUIT no es obligatorio en la B.
+3. Cargá los ítems. En la factura B el precio que escribís es el final, con el IVA ya incluido.
+4. Elegí el medio de pago: efectivo, transferencia, débito, crédito o QR.
+5. Imprimir solo muestra el PDF. Guardar es el paso que descuenta el stock de los productos del inventario y, si la facturación electrónica está activa, pide la autorización.
+
+Resultado: si autoriza, el aviso es Factura autorizada y muestra el CAE. El ítem escrito a mano no descuenta stock. Remito y presupuesto no son esta factura.
+
+Nota: en modo prueba el cuadro dice Modo HOMOLOGACIÓN (prueba) y hay que confirmar Continuar en homologación. En producción pregunta Facturar en AFIP Producción y Confirmar y Emitir.
+
+### Cómo hago una factura A en SolutionsCars
+
+1. En Facturación elegí Factura A.
+2. El cliente tiene que tener CUIT. El campo DNI / CUIT dice Obligatorio solo en Factura A.
+3. Cargá ítems. En la A el precio es neto y SolutionsCars suma el IVA.
+4. Elegí medio de pago y quién atendió.
+5. Guardar descuenta stock y busca la autorización. Imprimir no lo hace.
+
+Resultado: el total discrimina el IVA. Si falta el CUIT, el mensaje es El cliente necesita CUIT para Factura A y no emite.
+
+Nota: un ítem que no está en el inventario se puede escribir igual y no mueve el stock. Borrar después una factura ya autorizada no la anula ante el fisco: SolutionsCars lo advierte.
+
+### Cómo registro un cobro en la caja de SolutionsCars
+
+1. En Facturación abrí la pestaña de la caja. Ahí están Planilla y Movimientos.
+2. Si no hay planilla del día, tocá Abrir Planilla del Dia.
+3. Completá Entidad (quien pagó o a quien se pagó), Descripcion, Monto, Metodo de pago y Categoria. La categoría puede ser cobranza, adelanto, servicios, proveedores, impuestos o varios.
+4. Tocá Agregar.
+
+Resultado: arriba se ven ingresos, egresos y el balance del día. En Movimientos, Aplicar filtra por medio de pago, tipo y fechas.
+
+Nota: la caja no reemplaza a la factura. Guardar una factura A o B es el comprobante; la planilla anota el movimiento de dinero del día.
+
+### Cómo cierro la caja del día en SolutionsCars
+
+También se pregunta como: ¿Cómo cierro la caja? En SolutionsCars la caja del día es la planilla de Facturación.
+
+1. Con la planilla del día abierta en SolutionsCars, tocá Cerrar Planilla.
+2. El cuadro Cerrar Planilla del Dia muestra el resumen. Confirmá.
+3. En el historial, una planilla cerrada se puede VER. REABRIR la vuelve a abrir si no hay otra abierta de esa fecha. ELIMINAR pide una confirmación y después CONFIRMACION FINAL.
+
+Resultado: los movimientos pasan a las transacciones de caja y la jornada queda cerrada.
+
+Nota: no se pueden tener dos planillas abiertas para la misma fecha. Si hay que corregir, reabrí la de ese día.
+
+### Cómo aviso un vencimiento en SolutionsCars
+
+También se pregunta como: ¿Cómo aviso que vence la oblea? En SolutionsCars el aviso sale de Vencimientos, por WhatsApp o por correo.
+
+1. Abrí Vencimientos.
+2. Revisá las tarjetas de oblea y de prueba hidráulica: vencidos, esta semana y los próximos días. Actualizar recarga la lista.
+3. En la tarjeta, el botón de WhatsApp abre el mensaje armado (el tooltip dice Enviar WhatsApp). El de correo abre Preview del Email; ahí se puede Cancelar o Enviar Email.
+
+Resultado: el texto ya trae el trámite, el vehículo y los días. Si el mail sale, dice Email enviado a… con la dirección del cliente.
+
+Nota: sin teléfono no hay WhatsApp útil, y sin correo el mail no tiene destino. Los días de anticipación los cambia el administrador en Configuración, en las alertas de oblea, P.H. y certificado.
+
+### Cómo saco un balance en SolutionsCars
+
+1. Abrí Reportes.
+2. Elegí Día, Mes o Año y tocá Filtrar.
+3. Exportar baja el balance de ese período. Desde el mismo módulo se puede exportar el inventario o los clientes con sus vehículos y vencimientos.
+
+Resultado: el archivo queda en la carpeta de documentos del programa. Arriba se ve el conteo de clientes, vehículos, repuestos, stock bajo y órdenes.
+
+Nota: el balance es ingresos, egresos y diferencia del período, no una factura.
+
+### Cómo hago una copia de seguridad en SolutionsCars
+
+1. Entrá como administrador y abrí Configuración. El resto del equipo no entra ahí.
+2. En la parte de copias, hacé un backup en el momento o dejá Backup automático con la Hora (HH:MM).
+3. La lista deja Restaurar o eliminar. Eliminar pregunta ¿Eliminar …?.
+
+Resultado: queda una copia de la base. Restaurar backup pide confirmar porque reemplaza los datos actuales.
+
+Nota: antes de actualizar o de una importación grande, conviene una copia nueva. Si conectás la nube, Conectar a la Nube y después se puede Restaurar desde la nube.
+
+### Cómo actualizo SolutionsCars
+
+1. En Configuración, buscá actualizaciones.
+2. Si hay una, el cuadro Actualización disponible dice la versión y pregunta si continuar. Actualizar sigue; Cancelar no.
+3. Después aparece Instalación en curso. SolutionsCars se cierra, instala y al abrir de nuevo avisa si quedó aplicada.
+4. Si ya estabas al día, el texto es Estás en la última versión.
+
+Resultado: la versión nueva queda instalada y los datos del taller siguen en la misma base.
+
+Nota: hacé un backup antes. Si al reabrir el aviso dice que no quedó aplicada, se puede reintentar desde Configuración. Descartar aviso solo oculta el cartel, no instala.
+
+### Cómo dejo los datos del taller en SolutionsCars
+
+1. Como administrador, abrí Configuración.
+2. Completá Nombre del taller, Dirección, Teléfono, Razón social, Ingresos brutos, Inicio de actividades y el lema del pie de factura. Esos textos salen en el PDF.
+3. Cargá el punto de venta y el modo de facturación: prueba (homologación) o producción. Pasar a producción pide Confirmar.
+4. Guardá.
+
+Resultado: las facturas nuevas usan esos datos. El campo del emisor está en esta pantalla; no hace falta repetirlo en cada comprobante.
+
+Nota: Configuración no la ve quien no es administrador. El certificado y el modo de prueba o producción los define el taller; SolutionsCars no los trae resueltos.
+
+## Problemas comunes y soluciones
+
+### No me deja entrar a SolutionsCars
+
+El texto rojo bajo el formulario dice la causa.
+
+1. Usuario y contraseña son requeridos: falta uno de los dos campos.
+2. Usuario o contraseña incorrectos: revisá mayúsculas y el ojo de la contraseña.
+3. Demasiados intentos. Espere … segundos: esperá ese tiempo y recién ahí volvé a Iniciar Sesión.
+4. Error al iniciar sesión: cerrá SolutionsCars y volvé a abrirlo.
+
+No hay en esa pantalla un botón de olvidé mi clave. La renueva quien administra el taller, o el propio cuadro de cambio si la cuenta está obligada a definir una nueva.
+
+### Me obliga a cambiar la contraseña
+
+SolutionsCars abre Cambio de contraseña obligatorio y no sigue hasta Guardar.
+
+1. Escribí Nueva contraseña y la misma en Confirmar contraseña.
+2. Si dice Las contraseñas no coinciden, repetilas iguales.
+3. Si la nueva es demasiado corta, el aviso pide al menos 4 caracteres.
+
+Esa clave nueva es la que vas a usar la próxima vez. No queda publicada en ningún cartel.
+
+### Me dice código inválido
+
+Inventario y Lista de Precios piden Acceso a Inventario. Facturación pide Acceso a Facturación. El campo se llama Código.
+
+1. Si está vacío: Ingrese su código.
+2. Si no es el de un usuario activo: Código inválido.
+3. Cancelar vuelve a Inicio y no abre el módulo.
+
+Es un código distinto de la contraseña de entrar. Lo tiene cada usuario; no es una clave única publicada del programa. El de facturación y el de inventario pueden no ser el mismo.
+
+### No aparece el cliente
+
+1. En Clientes y Vehículos, pestaña Clientes, borrá el Buscar.
+2. Mirá si el cartel dice Sin clientes registrados: todavía no se guardó con Guardar cliente.
+3. En Facturación el cliente se elige escribiendo y tocando una sugerencia. Si solo quedó texto suelto, no está elegido.
+4. Un cliente con vehículos o comprobantes no se borra: si “desapareció”, puede estar en otra página de la lista.
+
+### No me deja facturar
+
+1. Sin el código de Acceso a Facturación, la pantalla no abre. Código inválido deja el cuadro ahí.
+2. En Factura A, si el cliente no tiene CUIT, dice El cliente necesita CUIT para Factura A. Completalo en la ficha o en el campo DNI / CUIT y volvé a Guardar.
+3. Elegí el cliente de la sugerencia, no solo el texto.
+4. Imprimir no emite. Tiene que ser Guardar en una Factura A o Factura B.
+5. Presupuesto y remito no piden autorización. Si esperabas un CAE, el tipo de documento no era factura.
+
+### La factura salió con error de AFIP
+
+El cuadro Factura rechazada por AFIP dice que AFIP devolvió errores y los muestra en un recuadro. Tocá Entendido.
+
+1. Leé el texto del recuadro: es el motivo que volvió (datos del cliente, importes, punto de venta).
+2. Corregí la ficha del cliente o los ítems y emití de nuevo con Guardar.
+3. Si el taller está en prueba, el cuadro previo dice Modo HOMOLOGACIÓN (prueba). Un comprobante de prueba no es el de producción.
+4. Pasar a producción se confirma en Configuración. No cambia solo.
+
+SolutionsCars no muestra por dentro cómo se pide la autorización. Lo que ves es ese cuadro o el aviso Factura autorizada con el CAE.
+
+### Quedó pendiente de AFIP
+
+El título es Comprobante pendiente de AFIP: No se pudo confirmar la autorización. El comprobante quedó pendiente. Pide usar Verificar en AFIP en la lista antes de volver a emitir.
+
+1. No hagas otra factura igual enseguida.
+2. En el historial, abrí el pendiente y usá Verificar en AFIP.
+3. Si corresponde anularlo, está Anular pendiente AFIP. Borrarlo como un documento común puede decir Pendiente AFIP — no se puede eliminar así o Eliminación no permitida.
+4. Si el aviso es Error al emitir en AFIP y aclara que quedó pendiente, el paso es el mismo: verificar antes de reintentar.
+
+A veces AFIP autorizó y el CAE quedó guardado en el pendiente, pero el registro local no cerró. El mensaje lo dice. Completá ese pendiente; no emitas un duplicado.
+
+### Me aparece precio en cero
+
+Al agregar un ítem sin importe, SolutionsCars abre Precio en cero.
+
+1. Cargar precio vuelve al importe.
+2. Agregar con $0 lo suma igual en cero. En una factura A o B, un total que no supera cero no pide autorización.
+3. Para cotizar en serio, cargá P. Unit. antes de Guardar.
+
+### No se actualiza el programa
+
+1. En Configuración, buscá actualizaciones. Estás en la última versión significa que no hay otra.
+2. Si aparece Actualización disponible, tocá Actualizar, no Cancelar.
+3. Instalación en curso cierra SolutionsCars para instalar. Volvé a abrirlo y leé el aviso.
+4. Si el aviso dice que no quedó instalada, repetí la búsqueda. Descartar aviso no instala.
+5. Hacé un backup antes. Sin conexión, la búsqueda no puede ver si hay versión nueva.
+
+### El kilometraje no me deja
+
+En Recepción o en el vehículo, el número tiene que ser un entero.
+
+1. El kilometraje debe ser un número entero válido: no uses letras ni decimales.
+2. El kilometraje no puede ser negativo, ni pasar de 9.999.999.
+3. El kilometraje no puede ser menor al último registrado, y el mensaje muestra ese último valor. Cargá un número igual o mayor.
+4. Si el auto estaba mal cargado, corregí el kilometraje en la ficha del vehículo y recién ahí recepcioná.
+
+### No puedo borrar la factura
+
+1. Una factura autorizada, al borrarla en SolutionsCars, sale del programa y devuelve el stock, pero no se anula ante el fisco. El programa lo advierte. La anulación fiscal se hace con el comprobante que indique el contador.
+2. Un pendiente de AFIP puede decir Pendiente AFIP — no se puede eliminar así. Usá Verificar en AFIP o Anular pendiente AFIP.
+3. Eliminación no permitida: leé el texto del cuadro y tocá Entendido. No es un fallo de la lista.
+
+### La copia no restaura o la nube no conecta
+
+1. En Configuración, Restaurar backup pide confirmación. Si confirmás, los datos de ahora se reemplazan. Hacé antes una copia del estado actual.
+2. Si la lista está vacía, todavía no hay backup. Creá uno en el momento.
+3. Conectar a la Nube pide un Código de autorización en ese cuadro. Si no conecta, las copias locales siguen en la misma pantalla.
+4. Restaurar desde la nube usa una copia ya subida. Sin haber conectado, ese botón no tiene de dónde traer.
 
 ## Tecnologías
 
@@ -212,7 +500,7 @@ La caja de SolutionsCars es la planilla diaria, dentro de Facturación. Se abre 
 
 ### ¿Anda con AFIP?
 
-SolutionsCars puede emitir factura electrónica y guardar el código de autorización en el comprobante y en el PDF. Hay un modo de prueba y un modo de producción. El administrador elige el modo, el punto de venta y los datos del emisor en Configuración. Los certificados los instala el taller; no vienen resueltos solos con el programa.
+También se pregunta como: el sistema del taller ¿anda con AFIP? En SolutionsCars la factura electrónica guarda el código de autorización en el comprobante y en el PDF. Hay un modo de prueba y un modo de producción. El administrador elige el modo, el punto de venta y los datos del emisor en Configuración. Los certificados los instala el taller; no vienen resueltos solos con el programa.
 
 ### ¿Qué es el CAE?
 
@@ -277,6 +565,98 @@ En el inventario de SolutionsCars, verde es stock normal, naranja es que se est�
 ### ¿Quién configura el taller?
 
 Solo el rol administrador abre Configuración en SolutionsCars: datos que salen en las facturas, alertas, facturación electrónica, copias, nube y actualizaciones. El resto del equipo usa los módulos de trabajo.
+
+### ¿Dónde veo lo que me deben en SolutionsCars?
+
+También se pregunta como: ¿Dónde veo lo que me deben? En SolutionsCars no hay una cuenta corriente aparte. Lo que te deben no es una pantalla propia: lo cobrado y lo pagado del día está en Facturación, pestaña de la caja, con ingresos, egresos y balance. Las facturas guardadas se buscan en el historial, con cliente, vehículo y período. Reportes, con Día, Mes o Año y Filtrar, muestra el balance de ese período.
+
+### ¿Se puede deshacer en SolutionsCars?
+
+No hay un botón Deshacer. Un cliente o un vehículo eliminado pregunta antes y, en el vehículo, avisa que no se puede deshacer. Un producto va a la papelera y se puede Restaurar, hasta que se vacíe la papelera. Para volver atrás del todo, en Configuración se restaura un backup, y eso reemplaza los datos de ahora.
+
+### ¿Qué pasa si se corta la luz en SolutionsCars?
+
+También se pregunta como: ¿Qué pasa si se corta la luz? En SolutionsCars queda lo que ya se guardó en la computadora. Un formulario sin Guardar, sin Guardar cliente o sin Generar comprobante PDF no quedó. Al abrir de nuevo, revisá la lista. Si se cortó internet al guardar una factura A o B, puede haber quedado un comprobante pendiente: verificalo antes de emitir otro. La caja del día, si no llegaste a cerrar la planilla, sigue abierta. Si la base no abre, Configuración permite restaurar un backup.
+
+### ¿Qué pasa si se corta internet al guardar la factura?
+
+En SolutionsCars, presupuesto y remito no hablan con el fisco. En factura A o B, si la autorización no se confirma, el cuadro se llama Comprobante pendiente de AFIP y pide Verificar en AFIP antes de emitir otra. No repitas el Guardar hasta revisar ese pendiente.
+
+### ¿Cómo hago una factura B en el taller?
+
+En Facturación de SolutionsCars, código de acceso, Tipo Documento en Factura B, cliente, ítems y Guardar. El precio que cargás es el final, con el IVA incluido. Imprimir solo muestra el papel y no autoriza. Si el modo es prueba, hay que confirmar Continuar en homologación.
+
+### ¿El presupuesto descuenta el stock?
+
+No. En SolutionsCars el presupuesto no lleva IVA ni autorización, y no es una factura. El stock de los productos del inventario baja al Guardar una factura A o B. Un ítem escrito a mano, aunque esté en una factura, no descuenta stock.
+
+### ¿Qué es la homologación en SolutionsCars?
+
+Es el modo de prueba de la facturación. Antes de emitir, el cuadro dice Modo HOMOLOGACIÓN (prueba). Esos comprobantes no son los de producción. El administrador elige el modo en Configuración. Pasar a producción pide confirmación.
+
+### ¿Por qué me pide CUIT si ya puse el nombre?
+
+En la factura A de SolutionsCars el campo DNI / CUIT dice Obligatorio solo en Factura A. Si falta, Guardar responde El cliente necesita CUIT para Factura A. En la factura B ese dato no es obligatorio. Se carga en la ficha del cliente o en ese campo.
+
+### ¿Puedo facturar sin patente?
+
+Sí. En Facturación de SolutionsCars el vehículo es opcional. En Recepción, en cambio, el vehículo es obligatorio para el ingreso del auto.
+
+### ¿Imprimir ya dejó la factura hecha?
+
+No. Imprimir en SolutionsCars arma el PDF de lo que está en pantalla y no guarda ni pide autorización. Guardar es el que registra la factura A o B, descuenta stock y busca el CAE si la emisión está activa.
+
+### ¿Puedo reabrir la caja de hoy?
+
+Sí, si ya la cerraste. En el historial de planillas de SolutionsCars está REABRIR, siempre que no haya otra abierta para esa fecha. VER mira el resumen. ELIMINAR pide dos confirmaciones.
+
+### ¿Cómo busco una factura vieja?
+
+En el historial de Facturación de SolutionsCars filtrá por cliente, vehículo, categoría y período, y tocá Aplicar. Limpiar saca los filtros. Ahí también está el pendiente, si la autorización no cerró.
+
+### ¿Quién entra a Configuración?
+
+Solo el administrador de SolutionsCars. Ahí están los datos del taller, las alertas, el punto de venta, el modo de facturación, las copias, la nube y las actualizaciones. El resto usa clientes, recepción, vencimientos y el resto del menú.
+
+### ¿Cómo mando el recordatorio de la oblea?
+
+En Vencimientos de SolutionsCars, en la tarjeta del auto, el botón de WhatsApp abre el mensaje ya escrito. El de correo abre Preview del Email y después Enviar Email. Hace falta teléfono o correo en la ficha. Actualizar refresca la lista.
+
+### ¿Se puede dejar un ítem a cero pesos?
+
+SolutionsCars pregunta Precio en cero. Cargar precio vuelve a poner el importe. Agregar con $0 lo suma igual. Una factura A o B cuyo total no es mayor que cero no pide autorización.
+
+### ¿Borré un repuesto y lo necesito?
+
+En el inventario de SolutionsCars, eliminar manda el producto a la papelera. Ahí está Restaurar. Vaciar papelera pregunta y avisa que no se podrán recuperar. Eso no borra la lista de precios de los trabajos.
+
+### ¿La actualización me borra los autos?
+
+No. Al actualizar, SolutionsCars se cierra, instala y al abrir dice si la versión quedó. Los datos siguen en la misma base. Igual, conviene un backup en Configuración antes de tocar Actualizar.
+
+### ¿Puedo usar SolutionsCars en el celular?
+
+No tiene app de teléfono. Es un programa de escritorio. WhatsApp del vencimiento sí puede abrirse en el teléfono porque es un enlace, no el programa. Varias computadoras juntas necesitan una base compartida, armada por quien administra el sistema.
+
+### ¿Qué miro apenas abro el taller?
+
+En Inicio están las tarjetas de cada módulo. Vencimientos muestra obleas y pruebas que ya vencieron o vencen pronto. Reportes resume clientes, vehículos, stock bajo y órdenes. La caja del día, si sigue abierta, está en Facturación.
+
+### ¿Remito y factura son lo mismo?
+
+No. En SolutionsCars el remito entrega o deja asentado sin factura y sin IVA. La factura A o B es la que, al Guardar, puede autorizarse y descontar stock. El presupuesto es la cotización. El tipo se elige en Tipo Documento.
+
+### ¿Cómo cambio la clave la primera vez?
+
+Si la cuenta debe renovarla, SolutionsCars no entra al taller: abre Cambio de contraseña obligatorio. Nueva contraseña, Confirmar contraseña y Guardar. Si no coinciden, lo dice. Después Iniciar Sesión usa esa clave.
+
+### ¿El código de facturación es la contraseña?
+
+No. La contraseña es la de Iniciar Sesión. El código es el que piden Acceso a Inventario (también para la lista de precios) y Acceso a Facturación. Si está mal, el campo dice Código inválido. Cada usuario tiene el suyo; no hay uno publicado para todos.
+
+### ¿Qué hago si dice que AFIP autorizó pero no cerró el comprobante?
+
+En SolutionsCars ese aviso aclara que la autorización salió y el CAE quedó en el documento pendiente, pero el registro no terminó. No emitas otra factura del mismo trabajo. Entrá al pendiente y usá Verificar en AFIP para completarlo.
 
 ## Glosario
 

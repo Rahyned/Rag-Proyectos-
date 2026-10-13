@@ -204,7 +204,7 @@ Detalles importantes del login:
   al administrador del laboratorio.
 - **Recordarme**: cuando está marcado, la sesión se guarda por **30 días** en
   esa computadora y STELLA te entra directo al dashboard sin volver a pedir la
-  contraseña. La sesión guardada es un token de acceso, no tu contraseña.
+  contraseña.
 - **Cerrar sesión**: al salir, el sistema pregunta si querés *Cerrar STELLA*
   (cierra la aplicación y conserva la sesión recordada) o *Cambiar de usuario*
   (borra la sesión y vuelve a la pantalla de login).
@@ -244,7 +244,7 @@ el administrador actualiza tu usuario.
 
 ## 2.5 Actualizaciones automáticas
 
-STELLA verifica al iniciar si hay una versión nueva publicada. Cuando
+También se pregunta como: ¿Cómo funcionan las actualizaciones automáticas? En STELLA el programa verifica al iniciar si hay una versión nueva publicada. Cuando está
 disponible, te avisa y podés descargar la actualización en segundo plano sin
 bloquear el trabajo. Al cerrar la aplicación se aplica; si algo falla, el
 sistema conserva la versión anterior. Verificá la versión actual en la
@@ -303,7 +303,7 @@ completa de atajos vigentes se muestra en la propia pantalla de configuración.
 
 El botón de cierre (esquina superior derecha) presenta dos opciones:
 
-- **Cambiar STELLA**: cierra la sesión actual, borra el token recordado y
+- **Cambiar STELLA**: cierra la sesión actual, borra la sesión recordada y
   vuelve a la pantalla de login para que ingrese otro usuario.
 - **Cerrar STELLA**: cierra la aplicación completa conservando la sesión
   recordada, de modo que la próxima apertura en esta computadora entre
@@ -792,6 +792,8 @@ saldo = 0  →  cuenta al día
 
 ## 9.2 Registrar un movimiento
 
+También se pregunta como: quiero cobrarle a un dentista. En STELLA ese cobro se anota en la cuenta corriente del consultorio.
+
 1. Entrá al módulo **Ctas. Ctes.**
 2. Tocá **Agregar movimiento**.
 3. Elegí el tipo y el titular (cliente o proveedor, con buscador).
@@ -974,15 +976,11 @@ log acelera enormemente la resolución.
 
 ## 11.6 Contraseñas y usuarios
 
-La creación y modificación de usuarios y contraseñas la realiza el
-administrador del sistema. Si olvidaste tu contraseña o necesitás cambiar de
-rol, contactá al administrador del laboratorio.
+También se pregunta como: ¿Cómo restablezco la contraseña de un usuario? En STELLA no hay una pantalla para cambiarla ni para crear usuarios. La creación y modificación de usuarios y contraseñas la realiza el administrador del sistema, por fuera del menú. Si la clave no entra, el mensaje es Usuario o contraseña incorrectos. Si olvidaste tu contraseña o necesitás cambiar de rol, contactá al administrador del laboratorio.
 
 ## 11.7 Actualizaciones
 
-Las actualizaciones se notifican al iniciar la aplicación (ver §2.5). Se
-recomienda no desactivarlas: cada versión corrige errores y mejora la
-estabilidad.
+El aviso al abrir STELLA y la descarga en segundo plano están en la sección 2.5 de este manual. Esta nota no describe otro mecanismo.
 
 ## 11.8 Buenas prácticas de respaldo y cierre
 
@@ -1003,6 +1001,649 @@ Y la regla de oro: **restaurar es destructivo**. Antes de restaurar, creá un
 backup del estado actual; así siempre podés volver atrás dos veces.
 
 ---
+
+# Guía de uso diario
+
+Estos pasos siguen las pantallas de STELLA tal como están en la versión que muestra Configuración, en Actualizaciones, como versión actual.
+
+## Tareas paso a paso
+
+### Cómo entro a STELLA
+
+1. Abrí STELLA. La ventana se llama Laboratorio RioDent.
+2. Completá Usuario y Contraseña. El ojo del campo muestra u oculta la clave.
+3. Si la computadora es la de siempre, marcá Recordarme. STELLA vuelve a entrar sola durante 30 días.
+4. Tocá Ingresar. El botón pasa a Validando… y después abre el programa.
+5. Si la cuenta es Admin, el título queda Laboratorio RioDent - Admin. Si no, Laboratorio RioDent - Consulta.
+
+Resultado: el menú de la izquierda muestra Dashboard, Proveedores, Clientes, Productos, Trabajos, Cuentas Corrientes y Configuración, con el rol y el usuario arriba.
+
+Nota: las pestañas Admin y Consultor de la pantalla de ingreso no cambian el permiso. Manda el rol de la cuenta. STELLA no publica un usuario ni una contraseña de fábrica.
+
+### Cómo agrego un cliente en STELLA
+
+1. Entrá con una cuenta Admin y abrí Clientes.
+2. Tocá ➕ Agregar Cliente. Se abre Nuevo Cliente.
+3. Completá Nombre Completo, Domicilio, Celular y Mail. Los cuatro son obligatorios.
+4. Tocá Guardar.
+
+Resultado: STELLA dice OK Cliente agregado y la fila aparece con Tipo Lista Precio en General. Ese tipo no se pide en el formulario; se puede cambiar después con doble clic en la celda.
+
+Nota: si falta un campo, el mensaje es Completa todos los campos. El buscador dice Buscar cliente… y la lista pagina de a 100.
+
+### Cómo corrijo un cliente en STELLA
+
+1. En Clientes de STELLA, como Admin, hacé doble clic en la celda (nombre, domicilio, celular, mail o tipo de lista).
+2. Escribí el valor nuevo y confirmá el cuadro ¿Cambiar de … a …?.
+3. Para borrar la fila, seleccionala y tocá 🗑️ Eliminar. STELLA pregunta ¿Eliminar este cliente?.
+
+Resultado: si aceptás, la grilla se actualiza. Si el borrado no puede hacerse, aparece Error al eliminar.
+
+Nota: Consultor no ve Agregar ni Eliminar, y la tabla de clientes queda bloqueada.
+
+### Cómo cargo un paciente en STELLA
+
+En STELLA el paciente no tiene una pantalla propia. Va dentro del trabajo.
+
+1. Abrí Trabajos y tocá ➕ Agregar. El cuadro se llama Nuevo Trabajo.
+2. En Paciente escribí el nombre de la persona.
+3. Completá el resto (cliente, número de orden, artículo, precio, estado y fecha de salida) y tocá Guardar.
+
+Resultado: la columna Paciente del listado muestra ese nombre. Color y pieza pueden quedar vacíos; el paciente no.
+
+Nota: si todavía no hay odontólogos cargados, STELLA no abre el formulario y dice No hay clientes cargados. Creá primero un cliente en la sección Clientes.
+
+### Cómo doy de alta un trabajo en STELLA
+
+1. Como Admin, abrí Trabajos y tocá ➕ Agregar.
+2. En Cliente / Odontólogo elegí un cliente. El odontólogo del trabajo queda con ese nombre.
+3. Completá N° Orden, Paciente, Artículo, Precio y Fecha de Salida. El formato de la fecha es dd/mm/yyyy, por ejemplo 25/12/2024.
+4. Estado ofrece en_proceso, terminado o cancelado. Color y Pieza son opcionales.
+5. Tocá Guardar.
+
+Resultado: STELLA dice OK Trabajo agregado correctamente. La fecha de entrada es la del momento. Si el precio es mayor que cero y el estado no es cancelado, el importe queda cargado en la cuenta corriente de ese cliente.
+
+Nota: Completa todos los campos, incluida la Fecha de Salida; Formato de fecha inválido. Usa dd/mm/yyyy; o El precio debe ser un número válido.
+
+### Cómo cambio el estado de un trabajo en STELLA
+
+1. En Trabajos de STELLA, como Admin, seleccioná la fila.
+2. Doble clic, o ⚙️ Acciones y después 📑 Editar. Se abre la pestaña Detalle.
+3. En Estado elegí en_proceso, terminado o cancelado. Ahí también se pueden corregir Odontólogo y Paciente.
+4. Tocá 💾 Guardar cambios.
+
+Resultado: el listado muestra el estado nuevo. Si pasás el trabajo a cancelado, STELLA saca el cargo de la cuenta corriente de ese trabajo.
+
+Nota: si no hay fila elegida, Detalle dice Seleccioná una fila en la pestaña Listado para ver su detalle.
+
+### Cómo busco un trabajo en STELLA
+
+1. Abrí Trabajos.
+2. Escribí en Buscar trabajo… (número, odontólogo o paciente).
+3. El botón que dice Todos abre En Proceso, Terminado o Cancelado.
+4. Si hace falta, F5 recarga la lista. Son 50 filas por página.
+
+Resultado: el cartel indica Hay un total de N trabajos con lo que coincide.
+
+Nota: un filtro dejado en Terminado esconde el resto. Volvé a Todos.
+
+### Cómo cargo un producto en STELLA
+
+1. Como Admin, abrí Productos y tocá ➕ Agregar. El cuadro es Nuevo Producto.
+2. Completá Artículo/Tarea.
+3. En Rubro elegí uno de la lista. No dejes -- Selecciona un rubro --.
+4. Cargá Precio Noviembre y Precio N. Noviembre. Si los dejás vacíos, quedan en 0.
+5. Tocá ✅ Guardar.
+
+Resultado: el artículo entra al catálogo. El precio de cliente de cada lista es el precio cargado con 15 % menos (se multiplica por 0,85). El de no cliente es el precio cargado, sin ese descuento.
+
+Nota: Completa el campo Artículo/Tarea, Debes seleccionar un rubro, o Los precios deben ser números válidos. El precio del trabajo no se copia solo desde acá: en la orden se tipea aparte.
+
+### Cómo creo un rubro en STELLA
+
+1. En Productos, como Admin, tocá ➕ Rubro.
+2. En el cuadro Nuevo Rubro escribí el nombre (el ejemplo de la pantalla es CERAMAGE).
+3. Guardá.
+
+Resultado: el rubro aparece en el botón 📂 Rubros y se puede elegir al dar de alta un artículo.
+
+Nota: el filtro 📂 Rubros, puesto en un rubro, deja fuera los demás. Para ver todo, volvé a la opción Rubros.
+
+### Cómo veo el precio de cliente en STELLA
+
+1. Abrí Productos.
+2. El botón 👤 Cliente cambia entre Cliente y No Cliente.
+3. El botón 📅 Noviembre cambia entre Noviembre y N. Noviembre.
+4. La columna Precio muestra el importe de esa combinación.
+
+Resultado: con Cliente ves el precio con el 15 % de descuento. Con No Cliente ves el precio de lista de ese mes.
+
+Nota: el buscador dice Buscar producto o artículo… y la lista pagina de a 100.
+
+### Cómo agrego un proveedor en STELLA
+
+1. Como Admin, abrí Proveedores.
+2. Tocá el botón de alta. El cuadro se llama Nuevo Proveedor.
+3. Completá Nombre Completo, Domicilio, Celular y Mail.
+4. Guardá.
+
+Resultado: la fila queda en la lista. El buscador dice Buscar proveedor….
+
+Nota: el alta pide los mismos cuatro datos que el cliente. Si falta uno, no guarda.
+
+### Cómo registro un cobro en STELLA
+
+También se pregunta como: ¿Cómo registro que me pagaron? En STELLA el cobro baja el saldo de la cuenta.
+
+1. Como Admin, abrí Cuentas Corrientes.
+2. Tocá ➕ Agregar Movimiento. El cuadro es Nuevo Movimiento - Cuenta Corriente.
+3. En Tipo elegí Cliente o Proveedor. En Seleccionar, la persona.
+4. Importe (valor del trabajo) es el cargo. Haber (pago del cliente) es lo que pagó. Podés cargar solo el haber si ya existía la deuda.
+5. Método de Pago: Efectivo, Tarjeta, Cheque, Transferencia u Otro.
+6. Tocá Guardar.
+
+Resultado: STELLA muestra Importe, Debe, Haber y Saldo. El texto de la pantalla aclara que el debe se calcula sumando trabajos anteriores. Un trabajo nuevo con precio mayor que cero ya deja su cargo; el haber es el pago.
+
+Nota: si no elegís persona, dice Selecciona un Cliente o Selecciona un Proveedor.
+
+### Cómo veo lo que me deben en STELLA
+
+También se pregunta como: ¿Dónde veo lo que me deben? En STELLA esa deuda está en Cuentas Corrientes, columna Saldo, y en Dashboard, tarjeta Pendiente. Ingresos, en el dashboard, es lo ya cobrado en el período, no la deuda.
+
+1. Abrí Cuentas Corrientes. La tabla tiene N° Ficha, Nombre, Tipo y Saldo.
+2. El botón Todos filtra Cliente o Proveedor.
+3. El buscador dice Buscar por cliente, proveedor o número de ficha….
+4. Doble clic en la fila (Admin) abre Detalle, la ficha de esa cuenta.
+5. En Dashboard, la tarjeta Pendiente muestra el saldo pendiente de cobro.
+
+Resultado: el saldo de la fila es lo que queda. En el dashboard, Ingresos es lo cobrado en el período.
+
+Nota: la lista pagina de a 100. Si no está, limpiá la búsqueda y el filtro de tipo.
+
+### Cómo imprimo un ticket en STELLA
+
+1. En Trabajos, seleccioná la orden.
+2. ⚙️ Acciones y 🎫 Generar Ticket, o en Detalle el botón 🎫 Generar Ticket.
+3. En Ticket de Trabajo elegí 👁️ Preview / Imprimir o 📄 Exportar PDF.
+
+Resultado: la vista previa se llama Preview — Ticket. Si exportás, STELLA dice OK PDF guardado y pide dónde dejar el archivo.
+
+Nota: sin fila elegida, Acciones dice Selecciona una fila primero.
+
+### Cómo imprimo una comanda en STELLA
+
+1. En Trabajos de STELLA, seleccioná la orden.
+2. ⚙️ Acciones y 📋 Generar Comanda, o en Detalle 📋 Generar Comanda.
+3. En Comanda de Trabajo usá Preview / Imprimir o Exportar PDF.
+
+Resultado: la comanda lleva paciente, odontólogo, trabajo, color y pieza. La vista previa es Preview de la comanda. El PDF confirma OK PDF guardado.
+
+Nota: hace falta una fila seleccionada. Consultor ve el botón, pero si la fila no queda marcada el aviso es Selecciona una fila primero.
+
+### Cómo saco un comprobante de pago en STELLA
+
+1. En Cuentas Corrientes, seleccioná el movimiento.
+2. ⚙️ Acciones y 🎫 Generar Comprobante de Pago. Esa opción solo aparece para Admin con una fila elegida.
+3. En Comprobante de Pago usá 👁️ Preview / Imprimir o 📄 Exportar PDF.
+
+Resultado: la vista previa se llama Preview — Comprobante de Pago. Exportar confirma OK PDF guardado.
+
+Nota: sin fila, el menú de acciones no ofrece el comprobante: solo descargar, exportar o imprimir la tabla.
+
+### Cómo reabro un documento ya generado en STELLA
+
+1. En el Detalle del trabajo, tocá 📚 Ver historial.
+2. El cuadro Historial de Documentos lista Tipo (ticket, comanda o comprobante), Archivo, Fecha y N° Ficha.
+3. Elegí la fila y tocá 👁️ Abrir o 💾 Descargar. Doble clic también descarga.
+
+Resultado: se abre o se guarda el PDF que ya se había generado para esa orden.
+
+Nota: si no hay nada, dice Sin documentos guardados para este trabajo. Admin puede 🗑️ Eliminar un documento de esa lista.
+
+### Cómo miro el dashboard de STELLA
+
+1. Abrí Dashboard. Es la primera pantalla después de entrar.
+2. Período: Hoy, Ayer, Última semana, Último mes, Últimos 3 meses, Último año o Personalizado. Después Aplicar.
+3. Comparar puede ser Sin comparación, Período anterior, Mismo período año pasado o Personalizado.
+4. Las tarjetas son Ingresos, Pendiente, Tiempo Entrega y Trabajos. Un clic explica qué suma cada una.
+5. Más abajo están Evolución de Ingresos, Top Clientes, Top Odontólogos, Top Productos, el rubro y los trabajos urgentes.
+
+Resultado: Pendiente es el saldo que falta cobrar. Ingresos es lo cobrado en el período. Si no hay urgentes, dice Sin trabajos urgentes.
+
+Nota: Refrescar arranca en Manual. También hay 1 min, 5 min, 10 min y 30 min. Si los números no se mueven, tocá Aplicar.
+
+### Cómo cierro el mes en STELLA
+
+1. Abrí Cuentas Corrientes y la pestaña Cierre de Mes.
+2. Elegí el mes y el año. Tocá Actualizar.
+3. Revisá Personas con Movimiento, Trabajos del Mes y Movimientos de la Cuenta.
+4. Como Admin, tocá 🔒 Cerrar Mes y confirmá. El texto dice que los datos del período quedan protegidos.
+5. 📥 Descargar Informe de Mes baja el informe. 🔓 Reabrir Mes vuelve a dejar el período modificable, también con confirmación.
+
+Resultado: el estado pasa a Mes Cerrado y figura quién lo cerró. Reabrir dice que el mes quedó reabierto.
+
+Nota: los movimientos en gris están fuera del período y no entran en el saldo. Consultor ve la pestaña; cerrar y reabrir no hacen nada si no sos Admin.
+
+### Cómo exporto a Excel en STELLA
+
+1. En Clientes, Proveedores, Productos, Trabajos o Cuentas Corrientes, abrí ⚙️ Acciones o, en trabajos, 📤 Importar/Exportar.
+2. Elegí 📥 Descargar Excel o 📄 Exportar CSV/JSON.
+3. En el cuadro Guardar Excel indicá el nombre y aceptá.
+
+Resultado: STELLA dice OK Archivo descargado y muestra dónde quedó. En el detalle de un trabajo también está 📥 Exportar Excel.
+
+Nota: si la exportación no tiene filas, puede decir No hay datos para exportar. Imprimir abre Vista Previa de la tabla, no un PDF.
+
+### Cómo importo una planilla en STELLA
+
+1. Como Admin, en el módulo que corresponda, elegí 📤 Importar o 📤 Importar Excel.
+2. El cuadro se llama Importar Clientes, Importar Trabajos o el del módulo que abriste.
+3. Abrí el archivo. Si el tipo no sirve, dice Formato no soportado.
+4. Asigná las columnas. STELLA avisa si falta una obligatoria: La columna '…' es obligatoria.
+5. Confirmá Se van a importar N registros.
+
+Resultado: al terminar dice Importación Completada. Conviene Crear Backup Ahora en Configuración antes de importar.
+
+Nota: No hay archivo cargado o No se encontraron datos para importar frenan el proceso. En trabajos, el estado tiene que ser en_proceso, terminado o cancelado.
+
+### Cómo hago una copia de seguridad en STELLA
+
+1. Entrá como Admin y abrí Configuración.
+2. Abrí la sección Backups. El texto dice que los respaldos locales se crean al iniciar STELLA.
+3. Tocá Crear Backup Ahora.
+4. El renglón de último backup deja de decir Cargando… y muestra el resultado.
+
+Resultado: queda una copia de la base en esa computadora, además de la que STELLA hace sola al abrir.
+
+Nota: Consultor no ve Backups ni Mantenimiento. Sí ve tema, atajos y actualizaciones.
+
+### Cómo restauro una copia en STELLA
+
+1. En Configuración, sección Backups, tocá 📂 Ver Backups.
+2. Si no hay nada, dice No hay backups disponibles.
+3. Elegí una copia y tocá ↩️ Restaurar seleccionado.
+4. Confirmá. Restaurar reemplaza los datos actuales por los de esa copia.
+
+Resultado: STELLA vuelve al estado de la copia elegida.
+
+Nota: antes de restaurar, hacé Crear Backup Ahora del estado de hoy, por si la copia vieja no era la que buscabas. 📄 Abrir carpeta de logs abre los registros; no hace falta buscar la carpeta a mano.
+
+### Cómo subo la copia a la nube en STELLA
+
+1. En Backups, mirá el estado de la nube.
+2. Si dice No conectado, tocá 🔗 Conectar a la nube. STELLA abre el navegador y espera la autorización.
+3. Cuando responde, el aviso es Conectado a la nube correctamente y el estado queda Conectado, con la última sync.
+4. ☁️ Subir ahora manda la copia. 📂 Restaurar desde la nube lista las copias de afuera. Subir automáticamente queda disponible recién conectado.
+
+Resultado: la copia queda fuera de la computadora y se puede traer de nuevo desde esa lista.
+
+Nota: Backup a Google Drive deshabilitado, No configurado, Error al iniciar autenticación o Tiempo de espera agotado. Intentá de nuevo. Si el estado dice API no disponible, STELLA no está llegando a su propio servicio.
+
+### Cómo actualizo STELLA
+
+1. Abrí Configuración y la sección Actualizaciones.
+2. Ahí figura Versión actual. Tocá 🔍 Buscar actualizaciones.
+3. Si hay una más nueva, pregunta ¿Descargar e instalar ahora?.
+4. El cuadro Actualizando STELLA muestra la descarga. Después: La actualización se descargó correctamente y pregunta si continuar. STELLA se cierra, instala y vuelve a abrir. El aviso dice que la base no se modifica.
+
+Resultado: al entrar de nuevo, Versión actual es la nueva. Si ya estabas al día, dice Ya tenés la última versión de STELLA.
+
+Nota: No se pudo verificar actualizaciones o No se pudo descargar la actualización piden conexión. No se pudo iniciar la instalación aparece si el instalador no arranca. Hacé una copia antes.
+
+### Cómo cambio el tema y los atajos en STELLA
+
+1. El tema también se cambia en el ingreso, con 🌙 Tema oscuro o ☀️ Tema claro.
+2. Adentro, Configuración, Tema de la aplicación, el botón Oscuro o Claro. Mientras aplica dice Aplicando….
+3. En Atajos de teclado, el lápiz de una fila abre Editar atajo. STELLA dice Presioná la nueva combinación de teclas….
+4. 🔄 Restablecer valores por defecto vuelve a Ctrl+N (nuevo), Ctrl+F (buscar), Ctrl+S (guardar), F5 (recargar) y Escape (minimizar).
+
+Resultado: el tema queda para la próxima vez. El atajo nuevo se usa en las tablas que lo tienen (alta, búsqueda, guardado y recarga).
+
+Nota: si la combinación no se acepta, el cuadro de atajo avisa y no la guarda.
+
+### Qué puede hacer cada rol en STELLA
+
+1. La cuenta Admin abre Laboratorio RioDent - Admin: alta, edición, borrado, backups, nube y mantenimiento.
+2. Cualquier otro rol abre Laboratorio RioDent - Consulta. No aparecen ➕ Agregar ni 🗑️ Eliminar.
+3. En Clientes y Productos la tabla del consultor no se edita.
+4. Cerrar sesión pregunta Cerrar STELLA (deja Recordarme) o Cambiar de usuario (vuelve al ingreso).
+
+Resultado: el encabezado del menú muestra el rol y el usuario, por ejemplo el texto con el nombre entre corchetes.
+
+Nota: STELLA no tiene una pantalla para crear usuarios ni para cambiar la contraseña. Esas altas no se hacen desde el menú.
+
+## Problemas comunes y soluciones
+
+### No me deja entrar a STELLA
+
+También se pregunta como: No me deja entrar. En STELLA eso es el ingreso, no un cierre de sesión a mitad del trabajo.
+
+STELLA muestra Usuario o contraseña incorrectos cuando el usuario no existe o la clave no coincide.
+
+1. Revisá mayúsculas y el ojo de la contraseña.
+2. Si el campo está vacío, antes dice Ingresá tu nombre de usuario o Ingresá tu contraseña.
+3. Si dice Cuenta desactivada, la cuenta existe pero está dada de baja. No hay en la pantalla un botón para reactivarla.
+4. Si dice Error del servidor (429), esperá y volvé a intentar más tarde. No reintentes seguido.
+
+### Me dice que el servidor no está
+
+En el ingreso, STELLA puede quedar en Conectando al servidor… y pasar a Servidor no disponible. Si tocás Ingresar igual, el cuadro Sin conexión dice No se pudo conectar a la API y pide verificar que el servidor esté corriendo.
+
+1. Cerrá STELLA y volvé a abrirla: el programa levanta su propio servicio al arrancar.
+2. Esperá a que el cartel de conexión desaparezca antes de Ingresar.
+3. Si sigue, como Admin abrí Configuración, Backups, y 📄 Abrir carpeta de logs.
+
+### STELLA no abre
+
+Si STELLA no puede iniciar su sesión segura, muestra un mensaje y no sigue.
+
+1. Cerrá y volvé a abrir.
+2. Si el mensaje habla de permisos de la carpeta de STELLA, tenés que poder escribir en tu carpeta de usuario de Windows.
+3. No borres archivos a mano para “arreglarlo”.
+
+### No me aparecen Agregar ni Eliminar
+
+Eso pasa cuando la cuenta no es Admin. La ventana dice Laboratorio RioDent - Consulta y el menú no muestra los botones de alta ni de borrado. En Clientes y Productos la grilla además queda bloqueada.
+
+1. Salí con Cambiar de usuario.
+2. Entrá con la cuenta Admin. Las pestañas de la pantalla de ingreso no alcanzan: el rol lo trae la cuenta.
+
+### No aparece el cliente
+
+También se pregunta como: No aparece el cliente. En STELLA el odontólogo está en Clientes; si la lista parece vacía, el dato puede estar en otra página o tapado por el buscador.
+
+1. En Clientes, borrá el texto de Buscar cliente….
+2. Mirá las páginas de abajo: la lista muestra 100 por vez.
+3. El cartel Hay un total de N clientes dice si el dato existe y no está en esta página.
+4. Si dice No se pudo actualizar. Verificá la conexión, el servicio de STELLA no respondió. Reintenta solo un par de veces y después muestra ese texto.
+
+### No me deja cargar un trabajo
+
+STELLA abre el aviso No hay clientes cargados. Creá primero un cliente en la sección Clientes.
+
+1. Andá a Clientes y da de alta al odontólogo, con nombre, domicilio, celular y mail.
+2. Volvé a Trabajos y tocá ➕ Agregar.
+3. En Cliente / Odontólogo tiene que haber un nombre elegido. Si no, dice Seleccioná un cliente.
+
+### Me pide completar todos los campos
+
+En un cliente o proveedor, Completa todos los campos: faltan nombre, domicilio, celular o mail.
+
+En un trabajo, Completa todos los campos, incluida la Fecha de Salida. Color y pieza pueden ir vacíos. El precio y la fecha no.
+
+En un producto, Completa el campo Artículo/Tarea o Debes seleccionar un rubro.
+
+### La fecha o el precio dan error
+
+En Nuevo Trabajo, Formato de fecha inválido. Usa dd/mm/yyyy significa que Fecha de Salida no se leyó. El ejemplo de la pantalla es 25/12/2024.
+
+El precio debe ser un número válido, o en productos Los precios deben ser números válidos. Probá con punto si la coma no entra en el casillero.
+
+Un trabajo con precio mayor que cero y estado distinto de cancelado deja el cargo en la cuenta. Precio 0 no genera ese cargo.
+
+### La lista no se actualiza
+
+El cartel de la tabla dice No se pudo actualizar. Reintentando… y, si sigue, No se pudo actualizar. Verificá la conexión.
+
+1. Tocá F5 o volvé a entrar al módulo.
+2. Si el ingreso también decía Servidor no disponible, cerrá STELLA y abrilo de nuevo.
+3. Una búsqueda o un filtro (estado, rubro, tipo de cuenta) dejan la lista corta a propósito. Limpiálos.
+
+### El dashboard no cambia
+
+Refrescar está en Manual hasta que elijas 1 min, 5 min, 10 min o 30 min. Los números salen del período elegido, que arranca en Último mes.
+
+1. Cambiá Período o las fechas y tocá Aplicar.
+2. Mientras carga, el botón dice Cargando… y el pie Actualizando….
+3. Un clic en la tarjeta Ingresos, Pendiente, Tiempo Entrega o Trabajos explica qué está sumando.
+
+### No se actualiza el programa
+
+También se pregunta como: No se actualiza el programa. En STELLA el programa es la aplicación, no la grilla de una pantalla.
+
+1. Configuración, Actualizaciones, 🔍 Buscar actualizaciones.
+2. Ya tenés la última versión de STELLA significa que no hay otra publicada. El renglón dice Estás en la última versión disponible.
+3. No se pudo verificar actualizaciones: no hubo conexión al publicar la búsqueda. Reintentá con internet.
+4. Si la descarga falla: No se pudo descargar la actualización. Si el archivo bajó pero no instala: No se pudo iniciar la instalación.
+5. La base no se toca en la actualización. Igual, Crear Backup Ahora antes de aceptar.
+
+### La nube no conecta
+
+En Backups el estado puede decir No conectado, No configurado, Backup a Google Drive deshabilitado, Error al iniciar autenticación, Tiempo de espera agotado o API no disponible.
+
+1. No conectado: tocá 🔗 Conectar a la nube y terminá la autorización en el navegador. El aviso de éxito es Conectado a la nube correctamente.
+2. No configurado o Backup a Google Drive deshabilitado: en esa instalación la nube no está habilitada. Las copias locales, Crear Backup Ahora y Ver Backups, siguen sirviendo.
+3. Tiempo de espera agotado: volvé a tocar Conectar a la nube.
+
+### Me dice que seleccione una fila
+
+Generar Ticket, Generar Comanda o Editar responden Selecciona una fila primero cuando no hay orden marcada.
+
+1. Hacé clic en la fila del listado, no solo en el buscador.
+2. Con Admin, el doble clic abre Detalle directo.
+3. En Cuentas Corrientes, Generar Comprobante de Pago solo entra al menú si hay una fila elegida y sos Admin.
+
+### El mes está cerrado y no me deja corregir
+
+En Cierre de Mes el estado Mes Cerrado dice que el período quedó protegido, y Mes Abierto dice Los datos de este período pueden modificarse.
+
+1. Elegí el mes y el año correctos y tocá Actualizar.
+2. Para volver a editar, Admin toca 🔓 Reabrir Mes y confirma. El aviso es que el mes quedó reabierto.
+3. Los movimientos en gris están fuera del período y no forman parte del saldo. No son un error de suma.
+
+### La importación de Excel falla
+
+STELLA avisa y no importa todo a ciegas.
+
+1. Formato no soportado o Error al leer archivo: el archivo no se pudo abrir. Usá la planilla que exportaste con Descargar Excel como modelo.
+2. La columna '…' es obligatoria: falta asignar ese campo en el mapeo.
+3. No hay archivo cargado o No se encontraron datos para importar: no hay filas para guardar.
+4. En trabajos, un estado que no sea en_proceso, terminado o cancelado se rechaza en esa fila.
+5. Si ya importaste de más, restaurá el backup que hiciste antes.
+
+### No hay documentos para reimprimir
+
+En Historial de Documentos, Sin documentos guardados para este trabajo significa que esa orden todavía no generó ticket, comanda o comprobante.
+
+1. En Detalle, Generar Ticket o Generar Comanda, y exportá o imprimí para que quede registrado.
+2. El comprobante de pago se genera desde Cuentas Corrientes, no desde Trabajos.
+3. Imprimir del menú Acciones es la vista previa de la tabla (Vista Previa - …), no el PDF del ticket.
+
+### Se cortó la luz
+
+Lo que ya habías guardado está en la base de la computadora. Lo que estaba a medio escribir en un cuadro, sin Guardar, no.
+
+1. Volvé a abrir STELLA. Al iniciar hace una copia local sola.
+2. Revisá el trabajo o el movimiento: si no está, cargalo de nuevo.
+3. Si la base quedó inutilizable, en Configuración, Ver Backups, restaurá una copia anterior. Eso reemplaza todo lo actual.
+4. STELLA no emite factura electrónica. Un corte no deja un trámite fiscal a medias porque ese trámite no existe en el programa.
+
+### Borré algo y no hay deshacer
+
+STELLA no tiene un botón Deshacer.
+
+1. Un cliente o un movimiento eliminado no vuelve solo.
+2. Cancelar un trabajo saca su cargo de la cuenta. Volver a ponerlo en en_proceso o terminado puede recrear el cargo si el precio es mayor que cero.
+3. Para volver atrás del todo, restaurá un backup. Antes, Crear Backup Ahora del estado actual.
+4. En Historial de Documentos, Admin puede borrar un PDF guardado. Generarlo de nuevo lo vuelve a crear.
+
+## Preguntas frecuentes
+
+### ¿Se puede deshacer en STELLA?
+
+No hay deshacer. Lo guardado se corrige editando la fila, o se vuelve atrás restaurando un backup desde Configuración. Restaurar pisa los datos de ahora.
+
+### ¿Qué pasa si se corta la luz con STELLA abierto?
+
+Queda lo último que STELLA llegó a guardar en la computadora. El formulario sin Guardar se pierde. Al volver a abrir, STELLA hace una copia local. Si la base no abre, se restaura desde Ver Backups.
+
+### ¿STELLA hace facturas de AFIP?
+
+No. STELLA no emite factura A, factura B ni otro comprobante electrónico. El papel del laboratorio es el ticket, la comanda y el comprobante de pago. La deuda y el cobro viven en Cuentas Corrientes.
+
+### ¿Puedo hacer un presupuesto en STELLA?
+
+No hay un documento llamado presupuesto. Para pasarle un precio al consultorio se puede imprimir la lista de Productos (Acciones, Imprimir) o anotar el importe en el trabajo. Imprimir un trabajo no lo autoriza ante nadie: solo muestra la orden.
+
+### ¿Cómo entro la primera vez a STELLA?
+
+Abrís el programa, completás el usuario y la contraseña que te dio quien administra el laboratorio, y tocás Ingresar. STELLA no muestra una clave inicial en la pantalla. Recordarme guarda la sesión 30 días en esa máquina.
+
+### ¿Para qué son las pestañas Admin y Consultor?
+
+Están en la pantalla de ingreso de STELLA, pero no eligen el permiso. Al validar, el programa usa el rol de la cuenta. Admin abre la ventana de administración. El resto abre Laboratorio RioDent - Consulta, sin altas ni borrados.
+
+### ¿Qué es el cliente en STELLA?
+
+El odontólogo o el consultorio que manda el trabajo, no el paciente. El paciente es un campo de la orden. Por eso un cliente se carga en Clientes y el paciente se escribe en Nuevo Trabajo.
+
+### ¿STELLA tiene vehículos o patentes?
+
+No. STELLA es de laboratorio odontológico. No hay pantalla de vehículos, dominios ni obleas. Lo equivalente al “caso” es el trabajo: orden, paciente, artículo, color y pieza.
+
+### ¿Cuánto es el descuento de clientes en STELLA?
+
+En Productos, el precio de cliente es el de la lista menos 15 % (el cargado por 0,85). No cliente muestra el precio sin ese descuento. Los botones Cliente / No Cliente y Noviembre / N. Noviembre eligen cuál columna estás viendo. El precio de la orden no se rellena solo: se escribe en el trabajo.
+
+### ¿Qué estados tiene un trabajo en STELLA?
+
+en_proceso, terminado y cancelado. El filtro del listado los muestra como En Proceso, Terminado y Cancelado, más Todos. No hay estado nuevo ni entregado en esa lista.
+
+### ¿Al cargar un trabajo ya queda la deuda?
+
+Sí, si el precio es mayor que cero y el estado no es cancelado. STELLA crea el movimiento en la cuenta del cliente. Un precio 0 no genera cargo. Cancelar el trabajo saca ese cargo.
+
+### ¿Puedo imprimir sin guardar el trabajo?
+
+El ticket y la comanda salen de una orden que ya está en la lista. Imprimir, en Acciones, es otra cosa: abre la vista previa de la tabla que estás viendo, sin crear un PDF de ticket.
+
+### ¿Dónde quedó el PDF?
+
+Al exportar, STELLA dice OK PDF guardado y muestra la ruta que elegiste en el cuadro de guardar. Para volver a abrirlo sin buscar el archivo, Detalle del trabajo, Ver historial, Abrir o Descargar.
+
+### ¿Se puede reimprimir la comanda?
+
+Sí. Si ya se generó, Ver historial la lista. Si dice Sin documentos guardados para este trabajo, hay que Generar Comanda otra vez desde el detalle.
+
+### ¿Cómo sé cuánto produjo el mes?
+
+Dashboard, período Último mes o Personalizado, y Aplicar. Trabajos cuenta las órdenes del período. Ingresos, lo cobrado. Para cerrar el número, Cuentas Corrientes, Cierre de Mes, y Descargar Informe de Mes.
+
+### ¿Quién cierra el mes?
+
+Solo Admin. El botón es Cerrar Mes, con una pregunta de confirmación. El estado pasa a Mes Cerrado. Reabrir Mes lo deja editable de nuevo. Consultor puede mirar la pestaña, no cerrarla.
+
+### ¿Cómo hago una copia de seguridad?
+
+Configuración, Backups, Crear Backup Ahora. Además, STELLA copia la base sola cada vez que se abre. Ver Backups lista las copias y Restaurar seleccionado vuelve a una de ellas.
+
+### ¿Restaurar borra lo que cargué hoy?
+
+Sí. Restaurar reemplaza los datos actuales por los de la copia. Conviene Crear Backup Ahora antes, para no perder el día si elegiste la copia equivocada.
+
+### ¿La nube es obligatoria?
+
+No. Si el estado dice No configurado o Backup a Google Drive deshabilitado, STELLA igual trabaja y guarda copias locales. Conectar a la nube es optativo y abre el navegador para autorizar.
+
+### ¿Cómo actualizo sin perder los datos?
+
+Buscar actualizaciones, aceptar la descarga y confirmar la instalación. El cuadro dice que la base no se modifica. Si no hay versión nueva, el mensaje es Ya tenés la última versión de STELLA.
+
+### ¿Funciona sin internet?
+
+El trabajo de todos los días (clientes, órdenes, cuentas) queda en la computadora. Internet hace falta para buscar actualizaciones y para la nube. Si el ingreso dice Servidor no disponible, el problema es el servicio de STELLA en esa máquina, no la web.
+
+### ¿Puedo usar STELLA en otra computadora del laboratorio?
+
+Cada instalación guarda su base en esa computadora. No hay en el menú un botón para elegir otra máquina. Las copias se pasan restaurando un backup o, si la nube está conectada, desde Restaurar desde la nube.
+
+### ¿Qué miro a la mañana?
+
+Dashboard: Pendiente (lo que falta cobrar), Trabajos del período y la lista de urgentes. Si dice Sin trabajos urgentes, no hay órdenes marcadas como atrasadas. Después, Trabajos con el filtro En Proceso.
+
+### ¿Cómo busco la corona de un paciente?
+
+Trabajos, Buscar trabajo…, el nombre del paciente o el número de orden. El filtro de estado no tiene que estar dejando afuera Terminado o Cancelado. Volvé a Todos si la lista parece vacía.
+
+### ¿Puedo cambiar el color o la pieza después?
+
+Sí, mientras seas Admin. Abrí el detalle de la orden, desplegá el artículo y editá Color, N° Pieza, Estado o Precio $. Guardar en esa ficha. Reimprimí la comanda si el técnico ya tenía la vieja.
+
+### ¿Qué pasa si pongo el precio en cero?
+
+En un trabajo que ya tenía precio, dejarlo en 0 saca el cargo de la cuenta corriente. STELLA pide confirmar esa anulación. Si el alta ya era con precio 0, no se crea cargo.
+
+### ¿Se pueden cargar dos artículos en la misma orden?
+
+Sí. El detalle de la orden lista los artículos de ese número, con precio y estado cada uno. Al dar de alta, el mismo N° Orden puede repetirse: STELLA numera los artículos de esa orden.
+
+### ¿Cómo saco la lista de precios en papel?
+
+Productos, Acciones, Imprimir. Se abre Vista Previa de la tabla, con el precio que esté mostrando Cliente o No Cliente y el mes elegido. Descargar Excel deja el mismo listado en un archivo.
+
+### ¿El consultor puede facturar o cobrar?
+
+No. En la ventana de consulta no están Agregar Movimiento ni Eliminar. Tampoco el alta de trabajos. Para cobrar hace falta la cuenta Admin.
+
+### ¿Por qué la tabla de clientes no se puede tocar?
+
+Porque entraste como Consultor. STELLA desactiva esa grilla y la de productos. Admin sí edita con doble clic y confirma el cambio.
+
+### ¿Cada cuánto se respalda solo?
+
+Cada vez que se abre STELLA, según el texto de Configuración, Backups. Crear Backup Ahora suma una copia en el momento, por ejemplo antes de importar o de cerrar el mes.
+
+### ¿Dónde están los atajos?
+
+Configuración, Atajos de teclado. De fábrica: Ctrl+N nuevo registro, Ctrl+F buscar, Ctrl+S guardar, F5 recargar, Escape minimizar. El lápiz cambia la combinación. Restablecer valores por defecto los vuelve atrás.
+
+### ¿Cómo pongo el tema claro?
+
+En el ingreso, el botón Tema claro / Tema oscuro. Adentro, Configuración, Tema de la aplicación. El cambio dice Aplicando… y queda guardado.
+
+### ¿Qué es el número de ficha?
+
+En Cuentas Corrientes la primera columna es N° Ficha. En el historial de documentos también hay N° Ficha, junto al tipo de PDF. Sirve para encontrar el movimiento o el papel de esa orden. Se busca desde el casillero Buscar por cliente, proveedor o número de ficha….
+
+### ¿Puedo importar la planilla vieja?
+
+Sí, como Admin, con Importar o Importar Excel en clientes, productos, proveedores, trabajos o cuentas. STELLA pide confirmar la cantidad de registros. Si el formato no sirve, dice Formato no soportado. Hacé un backup antes.
+
+### ¿STELLA avisa si me equivoqué de cliente en la orden?
+
+No corrige solo. En Detalle podés cambiar Odontólogo y Paciente y tocar Guardar cambios. El cliente del alta es el que quedó elegido en Cliente / Odontólogo. Si el cargo fue a otra cuenta, revisá Cuentas Corrientes.
+
+### ¿Por qué dice que hay que seleccionar un rubro?
+
+En Nuevo Producto el rubro arranca en -- Selecciona un rubro --. Sin elegir uno, Guardar responde Debes seleccionar un rubro. Si el rubro no existe, primero ➕ Rubro en Productos.
+
+### ¿La sesión se cierra sola?
+
+Con Recordarme, STELLA vuelve a entrar durante 30 días en esa computadora. Sin esa casilla, la próxima vez pide usuario y contraseña. Cerrar STELLA deja la sesión recordada. Cambiar de usuario la borra.
+
+### ¿Qué hago si dice error del servidor 429?
+
+Esperá y probá de nuevo más tarde. STELLA muestra Error del servidor (429) cuando hubo demasiados ingresos fallidos seguidos. No sirve cambiar de pestaña Admin o Consultor: eso no reinicia el intento.
+
+### ¿Puedo ver solo mis trabajos?
+
+La pantalla de consulta muestra el listado de trabajos del laboratorio, no un filtro por odontólogo automático. Para ver uno, usá Buscar trabajo…. Admin y Consultor no tienen en el menú un rol Odontólogo con órdenes propias.
+
+### ¿Cómo salgo sin perder la sesión?
+
+Cerrar Sesión, y en el cuadro Cerrar sesión elegí Cerrar STELLA. Cancelar no hace nada. Cambiar de usuario sí pide la clave la próxima vez.
+
+### ¿El precio con coma funciona?
+
+En cuentas, los montos aceptan coma decimal. En el alta de producto el casillero a veces no deja la coma: usá punto. Si igual falla, el mensaje es Los precios deben ser números válidos o El precio debe ser un número válido.
+
+### ¿Qué miro si dos personas cargan a la vez?
+
+STELLA en una computadora guarda todo en la misma base local. F5 recarga la lista. No hay en el menú un modo de varias cajas al mismo tiempo. Otra computadora no ve estos datos salvo que le restaures una copia.
+
+### ¿Cómo sé la versión que tengo?
+
+Configuración, Actualizaciones, el renglón Versión actual. Buscar actualizaciones dice si esa es la última o si hay otra para descargar.
 
 # 12. Preguntas frecuentes
 
@@ -1026,10 +1667,6 @@ maestra y opera con los mismos datos y permisos.
 
 **¿Cuánto dura la sesión con "Recordarme"?**
 30 días en esa computadora. Después volvés a ingresar tu contraseña.
-
-**Se cerró la sesión ¿dónde quedó guardada?**
-En la carpeta de configuración de STELLA, como token de acceso temporal; no
-se guarda tu contraseña en texto plano.
 
 **¿Cuánto descuento tienen los clientes?**
 15 %: el precio de cliente es el precio base multiplicado por 0,85. Quién
@@ -1179,7 +1816,7 @@ flechas; la búsqueda del módulo se enfoca con el atajo configurado para
 | Falta la opción de nube en Backups | Credencial de la aplicación no configurada en esta máquina | El administrador debe copiar el archivo de credencial a la carpeta de configuración |
 | Error al restaurar un backup | Archivo corrupto o incompatible | Probá con otra copia de la lista; contactá soporte con la carpeta de logs |
 | La app va lenta con muchas filas | Tabla muy grande sin filtrar | Usá búsqueda y paginación; el módulo cachea las consultas durante unos minutos |
-| Se cerró la sesión estando trabajando | Expiró el token o cambio de contraseña | Volvé a iniciar sesión; marcá Recordarme si la máquina es personal |
+| Se cerró la sesión estando trabajando | La sesión venció | Volvé a iniciar sesión; marcá Recordarme si la máquina es personal |
 | El dashboard no refleja lo último cargado | Métricas sin recalcular | Tocá **Actualizar** de la cabecera del dashboard |
 | El trabajo no aparece en Terminados | Filtro de estado activo | Limpiá el filtro o elegí "Todos los estados" |
 | La Estación de Consulta no conecta | Estación Maestra apagada o red caída | Encendé la maestra y verificá que ambas estén en la misma red |

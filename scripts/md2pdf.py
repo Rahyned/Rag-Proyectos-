@@ -7,6 +7,7 @@ es la fuente para el ingesta page-aware (scripts/ingest.py).
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import markdown
@@ -125,19 +126,23 @@ def main() -> None:
     HTML.write_text(html, encoding="utf-8")
 
     browser = find_browser()
-    subprocess.run(
-        [
-            str(browser),
-            "--headless",
-            "--disable-gpu",
-            "--no-pdf-header-footer",
-            f"--print-to-pdf={OUT}",
-            HTML.resolve().as_uri(),
-        ],
-        check=True,
-        capture_output=True,
-        timeout=120,
-    )
+    with tempfile.TemporaryDirectory(prefix="stella-pdf-") as perfil:
+        subprocess.run(
+            [
+                str(browser),
+                "--headless",
+                "--disable-gpu",
+                "--no-first-run",
+                "--do-not-de-elevate",
+                "--no-pdf-header-footer",
+                f"--user-data-dir={perfil}",
+                f"--print-to-pdf={OUT}",
+                HTML.resolve().as_uri(),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=120,
+        )
     HTML.unlink(missing_ok=True)
 
     try:
