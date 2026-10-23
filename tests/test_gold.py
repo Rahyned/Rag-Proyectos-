@@ -26,7 +26,8 @@ PROYECTOS = {
 }
 
 # El set de medición (gold_test) no se usa para mover el umbral.
-# BM25: 36/44. Híbrida contra el índice de la API de Jina: 41/44.
+# BM25: 36/44. Híbrida contra el índice de Jina: 41/44 (histórico; con el
+# índice de Cloudflare hay que volver a medirlo).
 MIN_BM25_TOP3 = 36
 MIN_HYBRID_TOP3 = 41
 
@@ -156,8 +157,12 @@ def test_index_matches_chunks():
     assert index.ntotal == len(chunks)
     assert index.ntotal == meta["n_chunks"]
     assert index.ntotal > 0
-    assert index.d == 768
-    assert meta["embed_model"] == EMBED_MODEL == "jinaai/jina-embeddings-v2-base-es"
+    if "dims" in meta:
+        assert index.d == meta["dims"]
+    else:
+        # Meta vieja, previa a la ingesta con Cloudflare.
+        assert index.d == 768
+    assert meta["embed_model"] == EMBED_MODEL
 
 
 def test_las_secciones_del_gold_existen_como_encabezado():

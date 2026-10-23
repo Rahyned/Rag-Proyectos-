@@ -1,7 +1,8 @@
 """Imprime hit@3 y hit@5 del gold, por proyecto, para BM25 y la híbrida.
 
-Sin JINA_API_KEY el denso queda apagado y solo se reporta BM25: el modelo
-local (ONNX) no se carga.
+Si `EMBEDDINGS_PROVIDER` está definida, se respeta (por ejemplo `off` para
+medir solo BM25). Si no, con `JINA_API_KEY` usa Jina y sin key apaga el
+denso: el modelo local (ONNX) no se carga.
 """
 
 from __future__ import annotations
@@ -16,10 +17,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 # Antes de importar rag: fuera de Vercel el default es el ONNX local.
-if not os.environ.get("JINA_API_KEY"):
-    os.environ["EMBEDDINGS_PROVIDER"] = "off"
-else:
-    os.environ["EMBEDDINGS_PROVIDER"] = "api"
+if not os.environ.get("EMBEDDINGS_PROVIDER", "").strip():
+    if os.environ.get("JINA_API_KEY"):
+        os.environ["EMBEDDINGS_PROVIDER"] = "api"
+    else:
+        os.environ["EMBEDDINGS_PROVIDER"] = "off"
 
 from rag.config import TOP_K  # noqa: E402
 from tests.test_gold import (  # noqa: E402

@@ -1,7 +1,7 @@
 """Ingesta multi-proyecto: corpus/<proyecto>/*.(md|pdf) -> chunks + FAISS.
 
 Uso:
-  python scripts/ingest.py [--sin-embed] [--provider local|api]
+  python scripts/ingest.py [--sin-embed] [--provider local|api|cloudflare]
   python scripts/ingest.py --check
     valida el manifiesto, corre el guardrail de secretos y compara el hash
     del corpus con el que quedó guardado al ingerir. No reindexa.
@@ -20,7 +20,9 @@ sys.path.insert(0, str(ROOT))
 
 from rag.chunking import (anteponer_ruta, asignar_paginas, chunk_markdown,  # noqa: E402
                           chunk_pdf, reasignar_ids)
-from rag.config import CHUNKS_PATH, CORPUS_DIR, DATA_DIR, EMBED_MODEL, INDEX_PATH  # noqa: E402
+from rag.config import (CF_EMBED_MODEL, CHUNKS_PATH, CORPUS_DIR,  # noqa: E402
+                        DATA_DIR, INDEX_PATH, JINA_EMBED_MODEL,
+                        LOCAL_EMBED_MODEL)
 from rag.manifiesto import ManifiestoError, cargar, limpiar_cache  # noqa: E402
 from rag.secretos import SecretosError, revisar_nombre, revisar_texto  # noqa: E402
 
@@ -129,13 +131,15 @@ def escribir_chunks(chunks: list) -> None:
     print(f"OK -> {CHUNKS_PATH} ({len(chunks)} chunks)")
 
 
-def escribir_meta(n_chunks: int, origen: str) -> None:
+def escribir_meta(n_chunks: int, origen: str, embed_model: str,
+                  dims: int) -> None:
     digest = hash_corpus()
     HASH_PATH.write_text(digest + "\n", encoding="utf-8", newline="\n")
     META_PATH.write_text(json.dumps({
         "corpus_sha256": digest,
         "n_chunks": n_chunks,
-        "embed_model": EMBED_MODEL,
+        "embed_model": embed_model,
+        "dims": dims,
         "origen": origen,
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
@@ -176,34 +180,44 @@ def chequear() -> None:
 
 
 def embedir(chunks: list, provider: str) -> None:
-    from rag.embeddings import JinaEmbeddings, LocalEmbeddings
+    from rag.embeddings import (CloudflareEmbeddings, JinaEmbeddings,
+                                LocalEmbeddings)
 
-    if provider == "api":
+    if provider == "cloudflare":
+        modelo = CloudflareEmbeddings()
+        origen = "cloudflare"
+        embed_model = CF_EMBED_MODEL
+    elif provider == "api":
         modelo = JinaEmbeddings()
-        vectores = modelo.embed_lote([c.text for c in chunks])
         origen = "api"
+        embed_model = JINA_EMBED_MODEL
     elif provider == "local":
         modelo = LocalEmbeddings()
-        vectores = modelo.embed_lote([c.text for c in chunks])
         origen = "local"
+        embed_model = LOCAL_EMBED_MODEL
     else:
         sys.exit(f"provider desconocido: {provider}")
+
+    vectores = modelo.embed_lote([c.text for c in chunks])
 
     import faiss
 
     index = faiss.IndexFlatIP(int(vectores.shape[1]))
     index.add(np.ascontiguousarray(vectores))
     faiss.write_index(index, str(INDEX_PATH))
-    escribir_meta(len(chunks), origen)
-    print(f"OK -> {INDEX_PATH} ({index.ntotal} vectores, dim={vectores.shape[1]}, {origen})")
+    dims = int(vectores.shape[1])
+    escribir_meta(len(chunks), origen, embed_model, dims)
+    print(f"OK -> {INDEX_PATH} ({index.ntotal} vectores, dim={dims}, {origen})")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sin-embed", action="store_true",
                         help="Solo extraer chunks, sin generar el índice")
-    parser.add_argument("--provider", choices=("local", "api"), default="local",
-                        help="De dónde salen los vectores del índice")
+    parser.add_argument(
+        "--provider", choices=("local", "api", "cloudflare"), default="local",
+        help="De dónde salen los vectores del índice",
+    )
     parser.add_argument("--check", action="store_true",
                         help="Valida manifiesto, secretos y hash; no reindexa")
     args = parser.parse_args()

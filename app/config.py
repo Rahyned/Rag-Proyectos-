@@ -48,6 +48,26 @@ def upstash_redis_rest_token() -> str:
     return os.getenv("UPSTASH_REDIS_REST_TOKEN", "").strip()
 
 
+def cf_account_id() -> str:
+    return os.getenv("CF_ACCOUNT_ID", "").strip()
+
+
+def cf_api_token() -> str:
+    return os.getenv("CF_API_TOKEN", "").strip()
+
+
+def cf_daily_budget() -> int:
+    """Llamadas a Cloudflare por día UTC. 0 = ilimitado; vacío = 300."""
+    raw = os.getenv("CF_DAILY_BUDGET", "300").strip()
+    if not raw:
+        return 300
+    try:
+        value = int(raw)
+    except ValueError:
+        return 300
+    return value if value >= 0 else 300
+
+
 def jina_api_key() -> str:
     return os.getenv("JINA_API_KEY", "").strip()
 

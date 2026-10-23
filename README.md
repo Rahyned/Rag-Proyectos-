@@ -23,15 +23,17 @@ Pregunta → (filtro de proyecto) → FAISS + BM25 → RRF → top-k
          → modo sintética (respuesta Groq, top_k efectivo ≤ 5) ─┴→ UI
 ```
 
-- **Retrieval**: BM25 corre siempre. El canal denso usa el índice FAISS de
-  `jina-embeddings-v2-base-es` (768d). En una máquina de desarrollo los
-  vectores salen de fastembed (ONNX, ~640 MB). En Vercel no entra ese
-  archivo: `EMBEDDINGS_PROVIDER=api` pide el mismo modelo a Jina
-  (`JINA_API_KEY`, timeout 3 s, cliente HTTP reutilizado). Si falta la key,
-  hay un error, se agota `JINA_DAILY_BUDGET` o se vence el timeout, la
-  consulta sigue en BM25. Un timeout, un 5xx o un 429 pausan Jina 10 minutos
-  (en memoria y en Upstash, si está) y el cupo solo baja cuando la llamada
-  responde bien.
+- **Retrieval**: BM25 corre siempre. El canal denso usa el índice FAISS
+  actual: `@cf/baai/bge-m3` (1024d) en producción y
+  `jina-embeddings-v2-base-es` (768d) en desarrollo/ingesta local. En Vercel,
+  `EMBEDDINGS_PROVIDER=cloudflare` pide los vectores a Workers AI
+  (`CF_ACCOUNT_ID` + `CF_API_TOKEN`, timeout 2 s, cliente HTTP reutilizado y
+  lotes de 50 en la ingesta). Si falta una credencial, se agota
+  `CF_DAILY_BUDGET`, hay un error o se vence el timeout, la consulta sigue en
+  BM25. Un timeout, un 5xx o un 429 pausan Cloudflare 90 s (en memoria y en
+  Upstash, si está) con claves propias (`cloudflare:circuit`) y el cupo solo
+  baja cuando la llamada responde bien. Jina sigue disponible como
+  alternativa (`EMBEDDINGS_PROVIDER=api`).
 - **Generación opcional**: si hay `LLM_API_KEY` (Groq, API compatible con
   OpenAI, con reintentos ante 5xx) redacta la respuesta con las citas; si no —
   o si falla — responde con los fragmentos crudos y sus páginas. El asistente
@@ -45,10 +47,10 @@ Pregunta → (filtro de proyecto) → FAISS + BM25 → RRF → top-k
 |------|------------|
 | API | FastAPI + SSE (`/api/chat`), Swagger en `/docs` |
 | Retrieval | Híbrido: FAISS + BM25 + RRF (portado de `instructor-LSA`) |
-| Embeddings | `jina-embeddings-v2-base-es` (768d): fastembed local o API de Jina |
+| Embeddings | `@cf/baai/bge-m3` (1024d) en Workers AI; Jina 768d o fastembed local como alternativas |
 | Generación | Opcional: Groq (compatible OpenAI) por env vars `LLM_*` |
 | UI | React 19 + Vite 8 + oxlint (ES, sin TypeScript) |
-| Tests | pytest (105 passed, 1 skipped; gold_test de 10 preguntas ES) |
+| Tests | pytest (147 passed, 1 skipped; gold_test de 44 preguntas ES) |
 | CI | GitHub Actions: pytest con `uv sync --frozen` + oxlint + build del cliente |
 | Deploy | Vercel: services `web` + `api` en un proyecto + proxy del portafolio |
 
@@ -113,11 +115,39 @@ El corpus es **repo-first**: los archivos viven en `corpus/<proyecto>/` y el
 el guardrail y que el hash del corpus coincida con el de la última ingesta.
 En un PR que toque `corpus/` lo corre `.github/workflows/corpus.yml`.
 
-## Índice local y API de Jina
+## Índice local, Cloudflare y Jina
 
-El índice commiteado se embebió con fastembed. Consulta y índice tienen que
-salir del mismo origen: si el coseno entre ambos baja de 0.99, reindexá con
-la API. Con `JINA_API_KEY` solo en el entorno (no en el repo):
+El índice viaja commiteado y la consulta tiene que usar el mismo espacio
+vectorial. `data/ingest_meta.json` guarda `embed_model`, `dims` y `origen`;
+el retriever compara la dimensión del vector de consulta contra `index.d` y,
+si no coincide, cae a BM25.
+
+Producción usa Cloudflare Workers AI (`@cf/baai/bge-m3`, 1024d). Para
+reindexar, las credenciales van solo en el entorno de esa sesión:
+
+```powershell
+$cfAccount = Read-Host "CF_ACCOUNT_ID"
+$secure = Read-Host "CF_API_TOKEN" -AsSecureString
+$bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+
+try {
+    $env:CF_ACCOUNT_ID = $cfAccount
+    $env:CF_API_TOKEN = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    uv run python scripts/ingest.py --provider cloudflare
+}
+finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    Remove-Item Env:CF_ACCOUNT_ID, Env:CF_API_TOKEN -ErrorAction SilentlyContinue
+    Remove-Variable cfAccount, secure, bstr -ErrorAction SilentlyContinue
+}
+```
+
+y commiteá juntos `data/index.faiss`, `data/ingest_meta.json` (y
+`data/chunks.jsonl` / `data/corpus.sha256` si cambiaron).
+
+El índice local de desarrollo se genera con `uv run python scripts/ingest.py`
+(fastembed, ONNX ~640 MB). Jina sigue como alternativa: con `JINA_API_KEY`
+solo en el entorno (no en el repo):
 
 ```powershell
 $env:JINA_API_KEY = "la-key"
@@ -146,8 +176,12 @@ Ver `.env.example`:
 | `LLM_DAILY_BUDGET` | llamadas a Groq por día UTC (default `300`; `0` = ilimitado). Vacío en `.env` usa el default |
 | `UPSTASH_REDIS_REST_URL` | opcional. Base REST de Upstash. Si falta (o Redis falla) el rate limit y el cupo quedan en memoria |
 | `UPSTASH_REDIS_REST_TOKEN` | opcional. Token del REST. Nunca commiteado |
-| `EMBEDDINGS_PROVIDER` | `local` (fastembed), `api` (Jina) u `off` (solo BM25). Si no está, `RAG_DENSE=0` apaga el denso; en Vercel sin ninguna de las dos el default es `api` |
-| `JINA_API_KEY` | key de `https://api.jina.ai/v1/embeddings` para `jina-embeddings-v2-base-es`. Nunca commiteada. Sin key, la consulta cae a BM25 |
+| `EMBEDDINGS_PROVIDER` | `cloudflare` (Workers AI, default en Vercel), `local` (fastembed), `api` (Jina) u `off` (solo BM25). Si no está, `RAG_DENSE=0` apaga el denso; en Vercel sin ninguna de las dos el default es `cloudflare` |
+| `CF_ACCOUNT_ID` | account id de Cloudflare Workers AI. Va por entorno, no al repo |
+| `CF_API_TOKEN` | token de Workers AI. Nunca commiteado. Sin él, la consulta cae a BM25 |
+| `CF_DAILY_BUDGET` | llamadas a Cloudflare por día UTC (default `300`; `0` = ilimitado). Solo se descuenta si la API responde OK. El cache (500) no consume cupo |
+| `EMBED_TIMEOUT_S` | timeout de la consulta de embeddings en segundos (default `2.0`) |
+| `JINA_API_KEY` | alternativa: key de `https://api.jina.ai/v1/embeddings` para `jina-embeddings-v2-base-es`. Nunca commiteada. Sin key, la consulta cae a BM25 |
 | `JINA_DAILY_BUDGET` | llamadas a Jina por día UTC (default `300`; `0` = ilimitado). Solo se descuenta si la API responde OK. El cache (500) no consume cupo |
 | `RAG_DENSE` | compatibilidad: `0` apaga el denso y `1` usa el modelo local, solo si `EMBEDDINGS_PROVIDER` no está definida |
 | `FASTEMBED_CACHE_PATH` | caché de descarga del modelo local (en Vercel, `rag/config.py` la fuerza a `/tmp`) |
@@ -178,13 +212,17 @@ Detalles que importan:
    redirige a `/asistente/corpus/stella/manual-stella.pdf`.
 4. Env vars en el dashboard **con scope Production** (las de Preview no
    aplican al dominio de producción): `LLM_API_KEY`, `LLM_BASE_URL`,
-   `LLM_MODEL`, `EMBEDDINGS_PROVIDER=api` y `JINA_API_KEY`. Si quedó
-   `RAG_DENSE=0` de antes, `EMBEDDINGS_PROVIDER` lo pisa. Sin la key de Jina
-   el denso cae a BM25 y la consulta no se rompe.
+   `LLM_MODEL`, `EMBEDDINGS_PROVIDER=cloudflare`, `CF_ACCOUNT_ID` y
+   `CF_API_TOKEN` (opcional `CF_DAILY_BUDGET`). Si quedó `RAG_DENSE=0` de
+   antes, `EMBEDDINGS_PROVIDER` lo pisa. Jina sigue disponible como
+   alternativa (`EMBEDDINGS_PROVIDER=api` + `JINA_API_KEY`). Sin
+   credenciales el denso cae a BM25 y la consulta no se rompe.
 5. `/api/health` expone `status` (`ok`/`degraded`), `retrievable` (índice y
-   chunks presentes), `llm` (key presente), `model`, `dense` y
-   `dense_error` (último fallo del canal denso, con rutas saneadas), para
-   saber en caliente si el denso cayó a BM25 y por qué.
+   chunks presentes), `llm` (key presente), `model`, `dense`, `embeddings`,
+   `index_dim` (dimensión del índice), `dense_error` (último fallo del canal
+   denso, con rutas saneadas) y `dense_error_origen` (el origen del proveedor
+   activo: Cloudflare o Jina), para saber en caliente si el denso cayó a BM25
+   y por qué.
 6. El aviso de build *"`api/` directory will not be built because services
    are configured"* es **esperado** con el modo services: `api/` entra por el
    rewrite, no como build standalone.
@@ -230,14 +268,15 @@ en memoria si no hay Redis. Al pasarse, `/api/chat` en modo sintética emite
 `top_k` efectivo queda en 5 aunque el cliente pida más; `/api/search` sigue
 hasta 10.
 
-`JINA_DAILY_BUDGET` usa la misma idea con la clave `jina:budget:YYYY-MM-DD`,
-pero el contador sube solo cuando Jina responde OK. Si el cupo está agotado,
-falta `JINA_API_KEY`, Jina responde mal o tarda más de 3 s, la búsqueda sigue
-en BM25. Un timeout, un 5xx o un 429 dejan la clave `jina:circuit` (o la
-pausa en memoria) por 10 minutos: la consulta siguiente no espera el timeout.
-El log anota el motivo (`sin_key`, `presupuesto`, `cuota`, `http_error`,
-`timeout`, `circuito`) y, si hubo HTTP, el status. Nunca la key. Un cache LRU
-de 500 consultas repetidas no vuelve a llamar a Jina.
+`CF_DAILY_BUDGET` y `JINA_DAILY_BUDGET` usan la misma idea con las claves
+`cloudflare:budget:YYYY-MM-DD` y `jina:budget:YYYY-MM-DD`; el contador sube
+solo cuando la API responde OK. Si el cupo está agotado, falta la credencial,
+la API responde mal o tarda más de 2 s, la búsqueda sigue en BM25. Un timeout,
+un 5xx o un 429 dejan la clave `cloudflare:circuit` o `jina:circuit` (o la
+pausa en memoria) por 90 s: la consulta siguiente no espera el timeout. El log
+anota el motivo (`sin_key`, `presupuesto`, `cuota`, `http_error`, `timeout`,
+`circuito`) y, si hubo HTTP, el status. Nunca la key. Un cache LRU de 500
+consultas repetidas no vuelve a llamar a la API.
 
 ## Roadmap
 

@@ -185,6 +185,63 @@ def test_origen_de_jina_persiste_en_redis(monkeypatch):
     assert ratelimit.jina_origen_circuito() == "timeout"
 
 
+def test_cupo_de_cloudflare_es_independiente(monkeypatch):
+    monkeypatch.setenv("CF_DAILY_BUDGET", "1")
+    ratelimit.anotar_llamada_cloudflare()
+    assert not ratelimit.puede_llamar_cloudflare()
+    assert ratelimit.puede_llamar_jina()
+    assert any(k.startswith("cloudflare:budget:") for k in ratelimit._budget)
+
+
+def test_circuito_de_cloudflare_no_pisa_jina():
+    ratelimit.abrir_pausa_jina("status_429")
+    assert not ratelimit.cloudflare_en_pausa()
+
+    ratelimit.anotar_fallo_cloudflare("timeout")
+    assert not ratelimit.cloudflare_en_pausa()
+    assert ratelimit.cloudflare_origen_circuito() == "timeout"
+
+    ratelimit.anotar_fallo_cloudflare("status_5xx")
+    assert ratelimit.cloudflare_en_pausa()
+    assert ratelimit.cloudflare_origen_circuito() == "status_5xx"
+    assert ratelimit.jina_origen_circuito() == "status_429"
+
+
+def test_origen_de_cloudflare_persiste_en_redis(monkeypatch):
+    _activar_redis(monkeypatch)
+    store = {}
+
+    def pipeline(commands):
+        out = []
+        for cmd in commands:
+            if cmd[0] == "SET":
+                store[cmd[1]] = cmd[2]
+                out.append({"result": "OK"})
+            elif cmd[0] == "GET":
+                out.append({"result": store.get(cmd[1])})
+            else:
+                out.append({"result": 0})
+        return out
+
+    monkeypatch.setattr(ratelimit, "_redis_pipeline", pipeline)
+    ratelimit.anotar_fallo_cloudflare("timeout")
+    assert store.get(ratelimit._CLOUDFLARE_LAST_ERROR_KEY) == "timeout"
+    assert ratelimit._JINA_LAST_ERROR_KEY not in store
+
+    # Otra instancia no tiene el origen en memoria: lo lee de Redis.
+    ratelimit._cloudflare_origen = None
+    assert ratelimit.cloudflare_origen_circuito() == "timeout"
+
+    ratelimit.anotar_fallo_cloudflare("timeout")
+    assert ratelimit.cloudflare_en_pausa()
+    assert store.get(ratelimit._CLOUDFLARE_CIRCUIT_KEY) == "timeout"
+
+    ratelimit._cloudflare_pause_until = 0.0
+    ratelimit._cloudflare_origen = None
+    assert ratelimit.cloudflare_en_pausa()
+    assert ratelimit.cloudflare_origen_circuito() == "timeout"
+
+
 def test_hits_viejos_expiran_en_la_ventana(monkeypatch):
     req = _request({"x-real-ip": "10.2.2.2"})
     for _ in range(10):

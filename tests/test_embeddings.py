@@ -1,5 +1,6 @@
-"""API de Jina con httpx falso: sin red, sin key en los logs."""
+"""Embudo de embeddings con httpx falso: sin red, sin keys en los logs."""
 
+import json
 import logging
 
 import httpx
@@ -7,7 +8,9 @@ import numpy as np
 import pytest
 
 from app import ratelimit
-from rag.embeddings import EmbedError, JinaEmbeddings
+from rag.config import CF_EMBED_URL
+from rag.embeddings import (CloudflareEmbeddings, EmbedError,
+                            JinaEmbeddings)
 
 
 def _cliente(handler):
@@ -314,3 +317,100 @@ def test_log_de_fallback_no_incluye_la_key(monkeypatch, tmp_path, caplog):
     texto = " ".join(caplog.messages)
     assert "timeout" in texto
     assert "jina-super-secreta" not in texto
+
+
+def _cliente_cloudflare(handler):
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def _configurar_cloudflare(monkeypatch, budget: str = "0") -> None:
+    monkeypatch.setenv("CF_ACCOUNT_ID", "cuenta-test")
+    monkeypatch.setenv("CF_API_TOKEN", "cf-test-token")
+    monkeypatch.setenv("CF_DAILY_BUDGET", budget)
+
+
+def test_cloudflare_parsea_result_data_y_normaliza(monkeypatch):
+    _configurar_cloudflare(monkeypatch)
+    llamadas = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        llamadas.append(request)
+        assert json.loads(request.content) == {"text": ["uno", "dos"]}
+        assert str(request.url) == CF_EMBED_URL.format(account_id="cuenta-test")
+        assert request.headers["authorization"] == "Bearer cf-test-token"
+        return httpx.Response(200, json={
+            "success": True,
+            "result": {"data": [[3.0, 4.0], [0.0, 5.0]]},
+        })
+
+    cf = CloudflareEmbeddings(client=_cliente_cloudflare(handler))
+    vectores = cf.embed_lote(["uno", "dos"])
+    assert len(llamadas) == 1
+    assert vectores.shape == (2, 2)
+    assert np.allclose(vectores[0], [0.6, 0.8])
+    assert np.allclose(np.linalg.norm(vectores, axis=1), 1.0)
+
+
+def test_cloudflare_ingesta_en_lotes_de_50(monkeypatch):
+    _configurar_cloudflare(monkeypatch)
+    lotes = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        textos = json.loads(request.content)["text"]
+        lotes.append(len(textos))
+        return httpx.Response(200, json={
+            "success": True,
+            "result": {"data": [[1.0, 0.0] for _ in textos]},
+        })
+
+    cf = CloudflareEmbeddings(client=_cliente_cloudflare(handler))
+    vectores = cf.embed_lote([f"texto {i}" for i in range(120)])
+    assert lotes == [50, 50, 20]
+    assert vectores.shape == (120, 2)
+
+
+def test_cloudflare_sin_key_no_llama(monkeypatch):
+    monkeypatch.delenv("CF_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("CF_API_TOKEN", raising=False)
+    llamadas = []
+
+    def handler(_request):
+        llamadas.append(1)
+        return httpx.Response(200, json={"result": {"data": []}})
+
+    cf = CloudflareEmbeddings(client=_cliente_cloudflare(handler))
+    with pytest.raises(EmbedError, match="sin_key"):
+        cf.embed_consulta("hola")
+    assert llamadas == []
+
+
+def test_cloudflare_timeout_es_embederror(monkeypatch):
+    _configurar_cloudflare(monkeypatch)
+
+    def timeout(_request):
+        raise httpx.TimeoutException("lento")
+
+    cf = CloudflareEmbeddings(client=_cliente_cloudflare(timeout))
+    with pytest.raises(EmbedError, match="timeout"):
+        cf.embed_consulta("hola")
+    assert not ratelimit.cloudflare_en_pausa()
+    assert ratelimit.cloudflare_origen_circuito() == "timeout"
+
+
+def test_cloudflare_cache_no_repite_la_red(monkeypatch):
+    _configurar_cloudflare(monkeypatch, budget="10")
+    llamadas = []
+
+    def handler(_request):
+        llamadas.append(1)
+        return httpx.Response(200, json={
+            "success": True,
+            "result": {"data": [[1.0, 0.0]]},
+        })
+
+    cf = CloudflareEmbeddings(client=_cliente_cloudflare(handler))
+    primero = cf.embed_consulta("mismo texto")
+    segundo = cf.embed_consulta("mismo texto")
+    assert len(llamadas) == 1
+    assert primero.shape == (1, 2)
+    assert np.allclose(primero, segundo)

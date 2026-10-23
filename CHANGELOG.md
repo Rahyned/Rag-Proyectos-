@@ -4,6 +4,61 @@
 
 ### Added
 
+- Proveedor `cloudflare` de embeddings de consulta con
+  `@cf/baai/bge-m3` (1024d) y reindexado en lotes de 50.
+- Cupo y circuito propios de Cloudflare: `CF_DAILY_BUDGET`,
+  `cloudflare:budget:*`, `cloudflare:circuit` y `cloudflare:last_error`.
+- `/api/health` expone `embeddings`, `index_dim` y el origen del error del
+  proveedor activo.
+- Tests de parseo de `result.data`, normalización L2, lotes de 50, `sin_key`,
+  timeout, cache, híbrida con 1024d y caída por dimensión.
+
+### Changed
+
+- En Vercel el proveedor por defecto pasa de `api` (Jina) a `cloudflare`.
+- `EMBED_MODEL` se lee de `data/ingest_meta.json`; la meta de ingesta ahora
+  guarda también `dims`.
+- `scripts/ingest.py --provider` acepta `cloudflare`.
+- `scripts/eval_gold.py` respeta un `EMBEDDINGS_PROVIDER` explícito (por
+  ejemplo `off` para medir BM25).
+- Jina queda como opción; no es más el default.
+- README y `.env.example` documentan `CF_ACCOUNT_ID`, `CF_API_TOKEN`,
+  `CF_DAILY_BUDGET` y `EMBED_TIMEOUT_S`.
+
+### Fixed
+
+- El canal denso caía siempre a BM25 porque Jina tardaba ~8 s y el timeout
+  de consulta es de 2 s.
+- El índice y la consulta podían desincronizarse por un `EMBED_MODEL`
+  escrito a mano.
+
+### Files
+
+- `.env.example`
+- `app/config.py`
+- `app/main.py`
+- `app/ratelimit.py`
+- `rag/config.py`
+- `rag/embeddings.py`
+- `scripts/eval_gold.py`
+- `scripts/ingest.py`
+- `tests/conftest.py`
+- `tests/test_embeddings.py`
+- `tests/test_gold.py`
+- `tests/test_health.py`
+- `tests/test_ratelimit.py`
+- `tests/test_retriever.py`
+- `README.md`
+
+### Tests
+
+`147 passed, 1 skipped`. Gold BM25: tuning 36/44 hit@3 y 38/44 hit@5; test
+36/44 hit@3 y 38/44 hit@5.
+
+## 2026-10-23 — main
+
+### Added
+
 - `EMBED_TIMEOUT_S` configura el timeout de la consulta a Jina; el default
   pasa a 2.0 s.
 - El origen del último fallo de Jina se guarda en Redis

@@ -9,6 +9,8 @@ def _reset_ratelimit(monkeypatch):
     monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
     monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
     monkeypatch.delenv("JINA_API_KEY", raising=False)
+    monkeypatch.delenv("CF_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("CF_API_TOKEN", raising=False)
     monkeypatch.delenv("EMBEDDINGS_PROVIDER", raising=False)
     ratelimit.reset()
     yield

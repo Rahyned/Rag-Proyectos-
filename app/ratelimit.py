@@ -31,17 +31,27 @@ _MAX_IPS = 10_000
 # 429s recientes de Groq → circuito abierto.
 GROQ_TRIP = 3
 GROQ_WINDOW_SECONDS = 60.0
-# 429 de Jina abre el circuito enseguida; timeout/5xx recién a los 2 en 60 s.
-JINA_FAIL_TRIP = 2
-JINA_FAIL_WINDOW_SECONDS = 60.0
+# 429 de una API de embeddings abre el circuito enseguida; timeout/5xx recién
+# a los 2 en 60 s. Jina y Cloudflare tienen estado y claves separados.
+DENSE_FAIL_TRIP = 2
+DENSE_FAIL_WINDOW_SECONDS = 60.0
 # La pausa dura lo mismo en memoria y en Redis: la siguiente consulta no
 # vuelve a esperar el timeout.
-JINA_CIRCUIT_SECONDS = 90
+DENSE_CIRCUIT_SECONDS = 90
+JINA_FAIL_TRIP = DENSE_FAIL_TRIP
+JINA_FAIL_WINDOW_SECONDS = DENSE_FAIL_WINDOW_SECONDS
+JINA_CIRCUIT_SECONDS = DENSE_CIRCUIT_SECONDS
+CLOUDFLARE_FAIL_TRIP = DENSE_FAIL_TRIP
+CLOUDFLARE_FAIL_WINDOW_SECONDS = DENSE_FAIL_WINDOW_SECONDS
+CLOUDFLARE_CIRCUIT_SECONDS = DENSE_CIRCUIT_SECONDS
 _JINA_CIRCUIT_KEY = "jina:circuit"
 # Último origen visto, aunque el circuito todavía no se haya abierto. Lo lee
 # /api/health en cualquier instancia.
 _JINA_LAST_ERROR_KEY = "jina:last_error"
-_JINA_ORIGENES = frozenset(("timeout", "status_429", "status_5xx"))
+_CLOUDFLARE_CIRCUIT_KEY = "cloudflare:circuit"
+_CLOUDFLARE_LAST_ERROR_KEY = "cloudflare:last_error"
+_DENSE_ORIGENES = frozenset(("timeout", "status_429", "status_5xx"))
+_JINA_ORIGENES = _DENSE_ORIGENES
 
 # La clave de la ventana fija vive un poco más que la ventana, para que el
 # INCR de los últimos segundos no expire antes del cambio de bucket.
@@ -63,6 +73,9 @@ _budget: dict[str, int] = {}
 _jina_pause_until = 0.0
 _jina_fallos: deque[float] = deque(maxlen=64)
 _jina_origen: str | None = None
+_cloudflare_pause_until = 0.0
+_cloudflare_fallos: deque[float] = deque(maxlen=64)
+_cloudflare_origen: str | None = None
 
 
 def client_ip(request: Request) -> str:
@@ -302,6 +315,16 @@ def _anotar(prefix: str, budget: int) -> None:
     _anotar_memoria(prefix)
 
 
+def puede_llamar_cloudflare() -> bool:
+    """True si el cupo diario de Cloudflare todavía no se agotó. No lo descuenta."""
+    return _cupo_disponible("cloudflare", config.cf_daily_budget())
+
+
+def anotar_llamada_cloudflare() -> None:
+    """Descuenta una llamada a Cloudflare que respondió OK."""
+    _anotar("cloudflare", config.cf_daily_budget())
+
+
 def puede_llamar_jina() -> bool:
     """True si el cupo diario todavía no se agotó. No lo descuenta."""
     return _cupo_disponible("jina", config.jina_daily_budget())
@@ -429,6 +452,115 @@ def jina_origen_circuito() -> str | None:
     return valor if valor in _JINA_ORIGENES else None
 
 
+def _guardar_origen_cloudflare(origen: str) -> None:
+    """Recuerda el último fallo de Cloudflare en memoria y en Redis."""
+    global _cloudflare_origen
+    with _lock:
+        _cloudflare_origen = origen
+    if not _redis_configured():
+        return
+    try:
+        _redis_pipeline([[
+            "SET", _CLOUDFLARE_LAST_ERROR_KEY, origen,
+            "EX", CLOUDFLARE_CIRCUIT_SECONDS,
+        ]])
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "no se pudo guardar el origen de cloudflare en Redis (%s)", exc
+        )
+
+
+def cloudflare_en_pausa() -> bool:
+    """True si un fallo reciente dejó Cloudflare en pausa (memoria o Upstash)."""
+    global _cloudflare_origen
+    now = time.monotonic()
+    with _lock:
+        if now < _cloudflare_pause_until:
+            return True
+    if not _redis_configured():
+        return False
+    try:
+        data = _redis_pipeline([["GET", _CLOUDFLARE_CIRCUIT_KEY]])
+    except Exception as exc:  # noqa: BLE001 — sin Redis, vale la memoria
+        log.warning(
+            "Redis no disponible (%s); circuito de cloudflare en memoria", exc
+        )
+        return False
+    valor = data[0]["result"]
+    if valor in _DENSE_ORIGENES:
+        # Otra instancia abrió el circuito: el origen viaja en la clave.
+        with _lock:
+            _cloudflare_origen = valor
+    return bool(valor)
+
+
+def abrir_pausa_cloudflare(origen: str | None = None) -> None:
+    """Pausa Cloudflare CLOUDFLARE_CIRCUIT_SECONDS."""
+    global _cloudflare_pause_until
+    if origen:
+        _guardar_origen_cloudflare(origen)
+    hasta = time.monotonic() + CLOUDFLARE_CIRCUIT_SECONDS
+    with _lock:
+        _cloudflare_pause_until = hasta
+    if not _redis_configured():
+        return
+    try:
+        _redis_pipeline([[
+            "SET", _CLOUDFLARE_CIRCUIT_KEY, origen or "1",
+            "EX", CLOUDFLARE_CIRCUIT_SECONDS,
+        ]])
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "no se pudo abrir el circuito de cloudflare en Redis (%s)", exc
+        )
+
+
+def anotar_fallo_cloudflare(origen: str) -> None:
+    """Registra un fallo de Cloudflare y abre el circuito cuando corresponde.
+
+    Un 429 abre enseguida. Un timeout o un 5xx abre al segundo dentro de
+    CLOUDFLARE_FAIL_WINDOW_SECONDS; el primer fallo solo queda registrado
+    como origen.
+    """
+    if origen == "status_429":
+        abrir_pausa_cloudflare(origen)
+        return
+    now = time.monotonic()
+    with _lock:
+        while (
+            _cloudflare_fallos
+            and now - _cloudflare_fallos[0] > CLOUDFLARE_FAIL_WINDOW_SECONDS
+        ):
+            _cloudflare_fallos.popleft()
+        _cloudflare_fallos.append(now)
+        abrir = len(_cloudflare_fallos) >= CLOUDFLARE_FAIL_TRIP
+        if abrir:
+            _cloudflare_fallos.clear()
+    if abrir:
+        abrir_pausa_cloudflare(origen)
+    else:
+        _guardar_origen_cloudflare(origen)
+
+
+def cloudflare_origen_circuito() -> str | None:
+    """Último motivo denso de Cloudflare (timeout / status_429 / status_5xx)."""
+    with _lock:
+        local = _cloudflare_origen
+    if local in _DENSE_ORIGENES:
+        return local
+    if not _redis_configured():
+        return None
+    try:
+        data = _redis_pipeline([["GET", _CLOUDFLARE_LAST_ERROR_KEY]])
+    except Exception as exc:  # noqa: BLE001 — sin Redis, vale la memoria
+        log.warning(
+            "Redis no disponible (%s); origen de cloudflare en memoria", exc
+        )
+        return None
+    valor = data[0]["result"] if data else None
+    return valor if valor in _DENSE_ORIGENES else None
+
+
 def note_groq_429() -> None:
     with _lock:
         _groq_429.append(time.monotonic())
@@ -445,6 +577,7 @@ def groq_limited() -> bool:
 def reset() -> None:
     """Solo para tests."""
     global _jina_pause_until, _jina_origen
+    global _cloudflare_pause_until, _cloudflare_origen
     with _lock:
         _hits.clear()
         _groq_429.clear()
@@ -452,3 +585,6 @@ def reset() -> None:
         _jina_fallos.clear()
         _jina_pause_until = 0.0
         _jina_origen = None
+        _cloudflare_fallos.clear()
+        _cloudflare_pause_until = 0.0
+        _cloudflare_origen = None

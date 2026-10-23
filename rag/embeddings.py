@@ -1,10 +1,11 @@
-"""Proveedor de embeddings: fastembed local, API de Jina, o apagado.
+"""Proveedor de embeddings: Cloudflare, Jina, fastembed local, o apagado.
 
-`api` usa el mismo modelo que el índice (`jina-embeddings-v2-base-es`).
-Si falta la key, se agota el cupo, la API responde 4xx/5xx o tarda más de
-2 s, `EmbedError` lleva solo el motivo: el retriever cae a BM25.
-Un 429 abre la pausa de Jina enseguida; un timeout o un 5xx recién a los
-2 fallos en 60 s. El cupo diario solo baja cuando la llamada responde OK.
+`cloudflare` usa Workers AI (`@cf/baai/bge-m3`, 1024d) y `api` usa Jina
+(`jina-embeddings-v2-base-es`, 768d). Si falta la key, se agota el cupo, la
+API responde 4xx/5xx o tarda más de 2 s, `EmbedError` lleva solo el motivo:
+el retriever cae a BM25. Un 429 abre la pausa enseguida; un timeout o un 5xx
+recién a los 2 fallos en 60 s. El cupo diario solo baja cuando la llamada
+responde OK. Jina y Cloudflare tienen cupo y circuito separados.
 """
 
 import logging
@@ -17,8 +18,9 @@ import numpy as np
 
 from app import config as app_config
 from app import ratelimit
-from rag.config import (EMBED_CACHE_SIZE, EMBED_MODEL, EMBED_TIMEOUT,
-                        JINA_EMBED_MODEL, JINA_EMBED_URL, embeddings_provider)
+from rag.config import (CF_EMBED_MODEL, CF_EMBED_URL, EMBED_CACHE_SIZE,
+                        EMBED_TIMEOUT, JINA_EMBED_MODEL, JINA_EMBED_URL,
+                        LOCAL_EMBED_MODEL, embeddings_provider)
 
 log = logging.getLogger("rag.embeddings")
 
@@ -31,10 +33,10 @@ class EmbedError(Exception):
         self.motivo = motivo
 
 
-def _loguear_fallo(motivo: str, inicio: float) -> None:
+def _loguear_fallo(proveedor: str, motivo: str, inicio: float) -> None:
     """Status y latencia de cada fallo. La key nunca entra al log."""
     latencia = (time.monotonic() - inicio) * 1000
-    log.warning("jina fallo: %s (%.0f ms)", motivo, latencia)
+    log.warning("%s fallo: %s (%.0f ms)", proveedor, motivo, latencia)
 
 
 def normalizar(vectors: np.ndarray) -> np.ndarray:
@@ -58,7 +60,7 @@ class LocalEmbeddings:
     def _modelo(self):
         if self._model is None:
             from fastembed import TextEmbedding
-            self._model = TextEmbedding(model_name=EMBED_MODEL)
+            self._model = TextEmbedding(model_name=LOCAL_EMBED_MODEL)
         return self._model
 
     def embed_lote(self, textos: list[str]) -> np.ndarray:
@@ -137,7 +139,7 @@ class JinaEmbeddings:
         except EmbedError:
             raise
         except httpx.TimeoutException:
-            _loguear_fallo("timeout", inicio)
+            _loguear_fallo("jina", "timeout", inicio)
             ratelimit.anotar_fallo_jina("timeout")
             raise EmbedError("timeout") from None
         except httpx.HTTPStatusError as exc:
@@ -147,14 +149,14 @@ class JinaEmbeddings:
                 else "status_5xx" if code >= 500
                 else None
             )
-            _loguear_fallo(f"status {code}", inicio)
+            _loguear_fallo("jina", f"status {code}", inicio)
             if origen:
                 ratelimit.anotar_fallo_jina(origen)
             if code in (402, 429):
                 raise EmbedError("cuota") from None
             raise EmbedError("http_error") from None
         except (httpx.HTTPError, ValueError):
-            _loguear_fallo("http_error", inicio)
+            _loguear_fallo("jina", "http_error", inicio)
             raise EmbedError("http_error") from None
         data = cuerpo.get("data") if isinstance(cuerpo, dict) else None
         if not isinstance(data, list) or len(data) != len(textos):
@@ -167,11 +169,122 @@ class JinaEmbeddings:
         return _matriz(vectores)
 
 
+class CloudflareEmbeddings:
+    """Embeddings de Workers AI. La ingesta va en lotes de 50.
+
+    El cache y el cupo aplican a consultas, no al lote de ingesta. El
+    circuito y el presupuesto son propios (`cloudflare:*`), separados de Jina.
+    """
+
+    MODEL = CF_EMBED_MODEL
+    BATCH_SIZE = 50
+
+    def __init__(self, client: httpx.Client | None = None,
+                 cache_size: int = EMBED_CACHE_SIZE) -> None:
+        self._client = client
+        self._cache_size = cache_size
+        self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def embed_lote(self, textos: list[str], timeout: float = 60.0) -> np.ndarray:
+        """Lote de ingesta: sin cache y sin el cupo diario de consultas."""
+        if not textos:
+            return np.empty((0, 0), dtype=np.float32)
+        partes = [
+            self._pedir(textos[i:i + self.BATCH_SIZE], timeout)
+            for i in range(0, len(textos), self.BATCH_SIZE)
+        ]
+        return np.vstack(partes)
+
+    def embed_consulta(self, texto: str) -> np.ndarray:
+        with self._lock:
+            guardado = self._cache.get(texto)
+            if guardado is not None:
+                self._cache.move_to_end(texto)
+                return guardado.reshape(1, -1).copy()
+        if not app_config.cf_account_id() or not app_config.cf_api_token():
+            raise EmbedError("sin_key")
+        if ratelimit.cloudflare_en_pausa():
+            raise EmbedError("circuito")
+        if not ratelimit.puede_llamar_cloudflare():
+            raise EmbedError("presupuesto")
+        # Sin reintento: si Cloudflare tarda o falla, se responde por BM25 ya.
+        matriz = self._pedir([texto], EMBED_TIMEOUT)
+        ratelimit.anotar_llamada_cloudflare()
+        with self._lock:
+            self._cache[texto] = matriz[0].copy()
+            self._cache.move_to_end(texto)
+            while len(self._cache) > self._cache_size:
+                self._cache.popitem(last=False)
+        return matriz
+
+    def _http(self) -> httpx.Client:
+        """Un solo cliente con keep-alive. El inyectado en tests no se reemplaza."""
+        if self._client is not None:
+            return self._client
+        with self._lock:
+            if self._client is None:
+                self._client = httpx.Client()
+            return self._client
+
+    def _pedir(self, textos: list[str], timeout: float) -> np.ndarray:
+        account = app_config.cf_account_id()
+        token = app_config.cf_api_token()
+        if not account or not token:
+            raise EmbedError("sin_key")
+        url = CF_EMBED_URL.format(account_id=account)
+        client = self._http()
+        inicio = time.monotonic()
+        try:
+            resp = client.post(
+                url,
+                json={"text": textos},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            cuerpo = resp.json()
+        except EmbedError:
+            raise
+        except httpx.TimeoutException:
+            _loguear_fallo("cloudflare", "timeout", inicio)
+            ratelimit.anotar_fallo_cloudflare("timeout")
+            raise EmbedError("timeout") from None
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            origen = (
+                "status_429" if code == 429
+                else "status_5xx" if code >= 500
+                else None
+            )
+            _loguear_fallo("cloudflare", f"status {code}", inicio)
+            if origen:
+                ratelimit.anotar_fallo_cloudflare(origen)
+            if code in (402, 429):
+                raise EmbedError("cuota") from None
+            raise EmbedError("http_error") from None
+        except (httpx.HTTPError, ValueError):
+            _loguear_fallo("cloudflare", "http_error", inicio)
+            raise EmbedError("http_error") from None
+        if not isinstance(cuerpo, dict) or cuerpo.get("success") is False:
+            raise EmbedError("http_error")
+        result = cuerpo.get("result")
+        data = result.get("data") if isinstance(result, dict) else None
+        if not isinstance(data, list) or len(data) != len(textos):
+            raise EmbedError("http_error")
+        try:
+            return _matriz([list(vector) for vector in data])
+        except (TypeError, ValueError):
+            raise EmbedError("http_error") from None
+
+
 def crear_embedder():
     """None si el denso está apagado."""
     modo = embeddings_provider()
     if modo == "off":
         return None
+    if modo == "cloudflare":
+        return CloudflareEmbeddings()
     if modo == "api":
         return JinaEmbeddings()
     if modo == "local":

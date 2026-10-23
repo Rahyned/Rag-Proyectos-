@@ -98,18 +98,35 @@ def _hits_or_503(query: str, top_k: int, proyecto: str | None) -> list[dict]:
         ) from None
 
 
+def _index_dim() -> int | None:
+    """Dimensión del índice FAISS actual, o None si no se puede leer."""
+    try:
+        import faiss
+
+        return int(faiss.read_index(str(INDEX_PATH)).d)
+    except Exception:  # noqa: BLE001 — health no debe romper por el índice
+        return None
+
+
 @app.get("/api/health")
 def health():
     retrievable = CHUNKS_PATH.exists() and INDEX_PATH.exists()
+    provider = embeddings_provider()
+    origen = (
+        ratelimit.cloudflare_origen_circuito()
+        if provider == "cloudflare"
+        else ratelimit.jina_origen_circuito()
+    )
     return {
         "status": "ok" if retrievable else "degraded",
         "retrievable": retrievable,
         "llm": bool(config.llm_api_key()),
         "model": config.llm_model(),
         "dense": dense_enabled(),
-        "embeddings": embeddings_provider(),
+        "embeddings": provider,
+        "index_dim": _index_dim(),
         "dense_error": rag_service.last_dense_error(),
-        "dense_error_origen": ratelimit.jina_origen_circuito(),
+        "dense_error_origen": origen,
     }
 
 

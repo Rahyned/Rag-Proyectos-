@@ -1,5 +1,6 @@
 """Configuración del paquete RAG (rutas y parámetros)."""
 
+import json
 import os
 from pathlib import Path
 
@@ -18,7 +19,31 @@ CHUNKS_PATH = DATA_DIR / "chunks.jsonl"
 INDEX_PATH = DATA_DIR / "index.faiss"
 GOLD_PATH = DATA_DIR / "gold_set.json"
 
-EMBED_MODEL = "jinaai/jina-embeddings-v2-base-es"
+# Modelo ONNX local. No es necesariamente el del índice: el índice se puede
+# haber generado con la API de Jina o con Cloudflare.
+LOCAL_EMBED_MODEL = "jinaai/jina-embeddings-v2-base-es"
+
+
+def _modelo_del_indice() -> str:
+    """Modelo con el que se embebió data/index.faiss, leído de la meta.
+
+    Si la meta falta o está rota, cae al modelo local para no romper el
+    arranque. Así consulta e índice no quedan desincronizados por una
+    constante escrita a mano.
+    """
+    try:
+        meta = json.loads(
+            (DATA_DIR / "ingest_meta.json").read_text(encoding="utf-8")
+        )
+        modelo = meta.get("embed_model")
+    except (OSError, ValueError, TypeError):
+        return LOCAL_EMBED_MODEL
+    if isinstance(modelo, str) and modelo.strip():
+        return modelo.strip()
+    return LOCAL_EMBED_MODEL
+
+
+EMBED_MODEL = _modelo_del_indice()
 CHUNK_MAX_CHARS = 1200
 CHUNK_OVERLAP = 150
 
@@ -34,22 +59,22 @@ BM25_BIGRAM_BONUS = 1.5
 
 
 def embeddings_provider() -> str:
-    """`local` (fastembed), `api` (Jina) u `off` (solo BM25).
+    """`local` (fastembed), `api` (Jina), `cloudflare` u `off` (solo BM25).
 
     `EMBEDDINGS_PROVIDER` gana. Si no está, `RAG_DENSE=0` apaga el denso y
     `RAG_DENSE=1` usa el modelo local. En Vercel, sin ninguna de las dos,
-    el default es `api` (el ONNX de ~640 MB no entra en el cold start).
-    Fuera de Vercel el default es `local`.
+    el default es `cloudflare` (Workers AI no descarga un ONNX de ~640 MB
+    en el cold start). Fuera de Vercel el default es `local`.
     """
     raw = os.getenv("EMBEDDINGS_PROVIDER", "").strip().lower()
-    if raw in ("local", "api", "off"):
+    if raw in ("local", "api", "cloudflare", "off"):
         return raw
     flag = os.environ.get("RAG_DENSE")
     if flag is not None:
         apagado = flag.strip().lower() in ("0", "false", "no", "")
         return "off" if apagado else "local"
     if os.environ.get("VERCEL") == "1":
-        return "api"
+        return "cloudflare"
     return "local"
 
 
@@ -74,6 +99,13 @@ def _float_env(name: str, default: float) -> float:
 # coseno de los mismos textos da ≥ 0.99; si no, el índice se rehace con la API.
 JINA_EMBED_MODEL = "jina-embeddings-v2-base-es"
 JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings"
-# Con Jina lenta es preferible responder por BM25 antes que esperar de más.
+# Cloudflare Workers AI: bge-m3 devuelve 1024 dimensiones. El índice se
+# normaliza L2 porque usa IndexFlatIP.
+CF_EMBED_MODEL = "@cf/baai/bge-m3"
+CF_EMBED_URL = (
+    "https://api.cloudflare.com/client/v4/accounts/"
+    "{account_id}/ai/run/@cf/baai/bge-m3"
+)
+# Con una API lenta es preferible responder por BM25 antes que esperar de más.
 EMBED_TIMEOUT = _float_env("EMBED_TIMEOUT_S", 2.0)
 EMBED_CACHE_SIZE = 500

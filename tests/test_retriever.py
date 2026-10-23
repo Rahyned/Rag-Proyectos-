@@ -255,6 +255,68 @@ def test_search_real_agrega_snippet(monkeypatch):
     assert "STELLA" in hits[0]["citation"]
 
 
+def _indice_y_chunks(tmp_path, dims: int):
+    import faiss
+    import numpy as np
+
+    fila = {
+        "chunk_id": "stella:p1:0",
+        "doc_id": "stella",
+        "title": "STELLA",
+        "page": 1,
+        "text": "agregar un cliente nuevo en el laboratorio",
+        "proyecto": "stella",
+        "proyecto_nombre": "STELLA",
+        "seccion": "Clientes",
+        "publico": True,
+        "tipo": "manual",
+    }
+    chunks = tmp_path / "chunks.jsonl"
+    chunks.write_text(json.dumps(fila, ensure_ascii=False) + "\n",
+                      encoding="utf-8")
+    index = faiss.IndexFlatIP(dims)
+    vector = np.ones((1, dims), dtype=np.float32)
+    index.add(vector / np.linalg.norm(vector))
+    index_path = tmp_path / "index.faiss"
+    faiss.write_index(index, str(index_path))
+    return chunks, index_path
+
+
+def test_search_hibrida_con_embedder_de_1024(monkeypatch, tmp_path):
+    import numpy as np
+
+    monkeypatch.setenv("EMBEDDINGS_PROVIDER", "cloudflare")
+    chunks, index_path = _indice_y_chunks(tmp_path, 1024)
+
+    class Fake1024:
+        def embed_consulta(self, _texto):
+            vector = np.ones((1, 1024), dtype=np.float32)
+            return vector / np.linalg.norm(vector)
+
+    retriever = HybridRetriever(chunks, index_path, embedder=Fake1024())
+    hits = retriever.search("agregar un cliente nuevo", 3, proyecto="stella")
+    assert hits
+    assert hits[0]["engine"] == "hibrida"
+
+
+def test_dimension_distinta_cae_a_bm25(monkeypatch, tmp_path):
+    import numpy as np
+
+    monkeypatch.setenv("EMBEDDINGS_PROVIDER", "cloudflare")
+    chunks, index_path = _indice_y_chunks(tmp_path, 1024)
+
+    class Fake768:
+        def embed_consulta(self, _texto):
+            vector = np.ones((1, 768), dtype=np.float32)
+            return vector / np.linalg.norm(vector)
+
+    retriever = HybridRetriever(chunks, index_path, embedder=Fake768())
+    hits = retriever.search("agregar un cliente nuevo", 3, proyecto="stella")
+    assert hits
+    assert hits[0]["engine"] == "bm25"
+    assert retriever._dense_error == "dimension"
+
+
 def test_filtra_y_detecta_proyecto(monkeypatch, tmp_path):
     """El metadato se aplica antes de rankear; si no hay selector, mira la pregunta."""
     import faiss
