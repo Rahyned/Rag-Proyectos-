@@ -31,13 +31,16 @@ _MAX_IPS = 10_000
 # 429s recientes de Groq → circuito abierto.
 GROQ_TRIP = 3
 GROQ_WINDOW_SECONDS = 60.0
-# 429 de Jina abre el circuito enseguida; timeout/5xx recién a los 3 en 60 s.
-JINA_FAIL_TRIP = 3
+# 429 de Jina abre el circuito enseguida; timeout/5xx recién a los 2 en 60 s.
+JINA_FAIL_TRIP = 2
 JINA_FAIL_WINDOW_SECONDS = 60.0
 # La pausa dura lo mismo en memoria y en Redis: la siguiente consulta no
 # vuelve a esperar el timeout.
 JINA_CIRCUIT_SECONDS = 90
 _JINA_CIRCUIT_KEY = "jina:circuit"
+# Último origen visto, aunque el circuito todavía no se haya abierto. Lo lee
+# /api/health en cualquier instancia.
+_JINA_LAST_ERROR_KEY = "jina:last_error"
 _JINA_ORIGENES = frozenset(("timeout", "status_429", "status_5xx"))
 
 # La clave de la ventana fija vive un poco más que la ventana, para que el
@@ -309,6 +312,26 @@ def anotar_llamada_jina() -> None:
     _anotar("jina", config.jina_daily_budget())
 
 
+def _guardar_origen_jina(origen: str) -> None:
+    """Recuerda el último fallo en memoria y en Redis, sin abrir el circuito.
+
+    Se guarda desde el primer fallo para que /api/health muestre
+    dense_error_origen aunque todavía no se hayan juntado los 2 fallos.
+    """
+    global _jina_origen
+    with _lock:
+        _jina_origen = origen
+    if not _redis_configured():
+        return
+    try:
+        _redis_pipeline([[
+            "SET", _JINA_LAST_ERROR_KEY, origen,
+            "EX", JINA_CIRCUIT_SECONDS,
+        ]])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("no se pudo guardar el origen de jina en Redis (%s)", exc)
+
+
 def jina_en_pausa() -> bool:
     """True si un fallo reciente dejó la API en pausa (memoria o Upstash).
 
@@ -341,12 +364,12 @@ def abrir_pausa_jina(origen: str | None = None) -> None:
     `origen` es el motivo que abrió el circuito (timeout, status_429 o
     status_5xx); /api/health lo expone como dense_error_origen.
     """
-    global _jina_pause_until, _jina_origen
+    global _jina_pause_until
+    if origen:
+        _guardar_origen_jina(origen)
     hasta = time.monotonic() + JINA_CIRCUIT_SECONDS
     with _lock:
         _jina_pause_until = hasta
-        if origen:
-            _jina_origen = origen
     if not _redis_configured():
         return
     try:
@@ -361,8 +384,9 @@ def abrir_pausa_jina(origen: str | None = None) -> None:
 def anotar_fallo_jina(origen: str) -> None:
     """Registra un fallo de Jina y abre el circuito cuando corresponde.
 
-    Un 429 abre enseguida. Un timeout o un 5xx solo abre al tercero dentro
-    de JINA_FAIL_WINDOW_SECONDS: un fallo aislado no corta el canal denso.
+    Un 429 abre enseguida. Un timeout o un 5xx abre al segundo dentro de
+    JINA_FAIL_WINDOW_SECONDS: el primer fallo no corta el canal denso pero
+    sí queda registrado como dense_error_origen.
     """
     if origen == "status_429":
         abrir_pausa_jina(origen)
@@ -380,12 +404,29 @@ def anotar_fallo_jina(origen: str) -> None:
             _jina_fallos.clear()
     if abrir:
         abrir_pausa_jina(origen)
+    else:
+        _guardar_origen_jina(origen)
 
 
 def jina_origen_circuito() -> str | None:
-    """Motivo que abrió el circuito (timeout / status_429 / status_5xx)."""
+    """Último motivo denso (timeout / status_429 / status_5xx).
+
+    Primero la memoria de esta instancia; si no hay, la clave que comparten
+    todas las instancias en Redis.
+    """
     with _lock:
-        return _jina_origen
+        local = _jina_origen
+    if local in _JINA_ORIGENES:
+        return local
+    if not _redis_configured():
+        return None
+    try:
+        data = _redis_pipeline([["GET", _JINA_LAST_ERROR_KEY]])
+    except Exception as exc:  # noqa: BLE001 — sin Redis, vale la memoria
+        log.warning("Redis no disponible (%s); origen de jina en memoria", exc)
+        return None
+    valor = data[0]["result"] if data else None
+    return valor if valor in _JINA_ORIGENES else None
 
 
 def note_groq_429() -> None:

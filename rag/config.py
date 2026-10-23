@@ -58,9 +58,22 @@ def dense_enabled() -> bool:
     return embeddings_provider() != "off"
 
 
+def _float_env(name: str, default: float) -> float:
+    """Lee un float del entorno; si falta o no es válido, usa el default."""
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        valor = float(raw)
+    except ValueError:
+        return default
+    return valor if valor > 0 else default
+
+
 # Modelo servido por la API de Jina. Mismo espacio que el ONNX local si el
 # coseno de los mismos textos da ≥ 0.99; si no, el índice se rehace con la API.
 JINA_EMBED_MODEL = "jina-embeddings-v2-base-es"
 JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings"
-EMBED_TIMEOUT = 6.0
+# Con Jina lenta es preferible responder por BM25 antes que esperar de más.
+EMBED_TIMEOUT = _float_env("EMBED_TIMEOUT_S", 2.0)
 EMBED_CACHE_SIZE = 500

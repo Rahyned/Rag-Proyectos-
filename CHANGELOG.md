@@ -1,5 +1,44 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-23 — main
+
+### Added
+
+- `EMBED_TIMEOUT_S` configura el timeout de la consulta a Jina; el default
+  pasa a 2.0 s.
+- El origen del último fallo de Jina se guarda en Redis
+  (`jina:last_error`) y `/api/health` lo lee de ahí si esta instancia no lo
+  vio, para que `dense_error_origen` no quede nulo en las demás instancias.
+
+### Changed
+
+- `embed_consulta` ya no reintenta: un timeout o un 5xx cae directo a BM25.
+- El circuito de Jina se abre con 2 fallos (timeout/5xx) en 60 s, no con 3.
+- El primer fallo ya no abre el circuito, pero sí queda registrado como
+  `dense_error_origen`.
+
+### Fixed
+
+- Cada búsqueda esperaba hasta ~18 s (dos timeouts de 6 s) cuando Jina
+  tardaba ~8 s.
+- `dense_error_origen` quedaba nulo tras un timeout porque el origen solo
+  se guardaba al abrir el circuito y no se compartía entre instancias.
+
+### Files
+
+- `rag/config.py`
+- `rag/embeddings.py`
+- `rag/hybrid.py`
+- `app/ratelimit.py`
+- `tests/test_embeddings.py`
+- `tests/test_ratelimit.py`
+- `tests/test_health.py`
+
+### Tests
+
+`135 passed, 1 skipped`. El gold no baja: tuning BM25 hit@3 36/44 y hit@5
+38/44; test BM25 hit@3 36/44 y hit@5 38/44.
+
 ## 2026-10-22 — fix/gold-solutionscars
 
 ### Added

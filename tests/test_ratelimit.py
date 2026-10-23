@@ -140,6 +140,51 @@ def test_jina_en_pausa_no_rearma_la_pausa_local(monkeypatch):
     assert not ratelimit.jina_en_pausa()
 
 
+def test_dos_fallos_en_60s_abren_el_circuito():
+    ratelimit.anotar_fallo_jina("timeout")
+    assert not ratelimit.jina_en_pausa()
+    assert ratelimit.jina_origen_circuito() == "timeout"
+
+    ratelimit.anotar_fallo_jina("status_5xx")
+    assert ratelimit.jina_en_pausa()
+    assert ratelimit.jina_origen_circuito() == "status_5xx"
+
+
+def test_origen_de_jina_persiste_en_redis(monkeypatch):
+    _activar_redis(monkeypatch)
+    store = {}
+
+    def pipeline(commands):
+        out = []
+        for cmd in commands:
+            if cmd[0] == "SET":
+                store[cmd[1]] = cmd[2]
+                out.append({"result": "OK"})
+            elif cmd[0] == "GET":
+                out.append({"result": store.get(cmd[1])})
+            else:
+                out.append({"result": 0})
+        return out
+
+    monkeypatch.setattr(ratelimit, "_redis_pipeline", pipeline)
+    ratelimit.anotar_fallo_jina("timeout")
+    assert store.get(ratelimit._JINA_LAST_ERROR_KEY) == "timeout"
+
+    # Otra instancia no tiene el origen en memoria: lo lee de Redis.
+    ratelimit._jina_origen = None
+    assert ratelimit.jina_origen_circuito() == "timeout"
+
+    ratelimit.anotar_fallo_jina("timeout")
+    assert ratelimit.jina_en_pausa()
+    assert store.get(ratelimit._JINA_CIRCUIT_KEY) == "timeout"
+
+    # Otra instancia ve el circuito por Redis y recupera el origen.
+    ratelimit._jina_pause_until = 0.0
+    ratelimit._jina_origen = None
+    assert ratelimit.jina_en_pausa()
+    assert ratelimit.jina_origen_circuito() == "timeout"
+
+
 def test_hits_viejos_expiran_en_la_ventana(monkeypatch):
     req = _request({"x-real-ip": "10.2.2.2"})
     for _ in range(10):

@@ -28,6 +28,15 @@ def test_health_expone_el_origen_del_circuito():
     assert data["dense_error_origen"] == "status_429"
 
 
+def test_health_expone_el_origen_tras_un_timeout():
+    from app import ratelimit
+
+    ratelimit.anotar_fallo_jina("timeout")
+    data = client.get("/api/health").json()
+    assert data["dense_error_origen"] == "timeout"
+    assert not ratelimit.jina_en_pausa()
+
+
 def test_health_sin_paths_locales(monkeypatch):
     from app.services import rag_service
     monkeypatch.setattr(

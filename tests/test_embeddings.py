@@ -23,6 +23,24 @@ def _ok(calls, key="jina-test-key"):
     return handler
 
 
+def test_embed_timeout_es_configurable(monkeypatch):
+    import importlib
+
+    from rag import config as rag_config
+
+    monkeypatch.setenv("EMBED_TIMEOUT_S", "1.5")
+    importlib.reload(rag_config)
+    assert rag_config.EMBED_TIMEOUT == 1.5
+
+    monkeypatch.setenv("EMBED_TIMEOUT_S", "no-es-numero")
+    importlib.reload(rag_config)
+    assert rag_config.EMBED_TIMEOUT == 2.0
+
+    monkeypatch.delenv("EMBED_TIMEOUT_S", raising=False)
+    importlib.reload(rag_config)
+    assert rag_config.EMBED_TIMEOUT == 2.0
+
+
 def test_jina_con_key_y_cache(monkeypatch):
     monkeypatch.setenv("JINA_API_KEY", "jina-test-key")
     monkeypatch.setenv("JINA_DAILY_BUDGET", "10")
@@ -105,8 +123,8 @@ def test_timeout_pausa_jina_y_no_gasta_cupo(monkeypatch, caplog):
             jina.embed_consulta("segunda")
     with pytest.raises(EmbedError, match="circuito"):
         jina.embed_consulta("tercera")
-    # Primera: dos intentos. Segunda: el tercer timeout abre el circuito.
-    assert calls == [1, 1, 1]
+    # Sin reintento: el segundo timeout abre el circuito.
+    assert calls == [1, 1]
     assert not any(k.startswith("jina:budget:") for k in ratelimit._budget)
     assert "timeout" in " ".join(caplog.messages)
     assert "jina-test-key" not in " ".join(caplog.messages)
@@ -123,10 +141,11 @@ def test_un_timeout_aislado_no_abre_el_circuito(monkeypatch):
     with pytest.raises(EmbedError, match="timeout"):
         jina.embed_consulta("consulta aislada")
     assert not ratelimit.jina_en_pausa()
-    assert ratelimit.jina_origen_circuito() is None
+    # El origen se ve igual, aunque el circuito todavía no esté abierto.
+    assert ratelimit.jina_origen_circuito() == "timeout"
 
 
-def test_tres_timeouts_en_60s_abren_el_circuito(monkeypatch):
+def test_dos_timeouts_en_60s_abren_el_circuito(monkeypatch):
     monkeypatch.setenv("JINA_API_KEY", "jina-test-key")
     monkeypatch.setenv("JINA_DAILY_BUDGET", "0")
 
@@ -134,9 +153,9 @@ def test_tres_timeouts_en_60s_abren_el_circuito(monkeypatch):
         raise httpx.TimeoutException("lento")
 
     jina = JinaEmbeddings(client=_cliente(timeout))
-    for _ in range(3):
+    for texto in ("consulta uno", "consulta dos"):
         with pytest.raises(EmbedError, match="timeout"):
-            jina._pedir(["consulta"], 1.0)
+            jina.embed_consulta(texto)
     assert ratelimit.jina_en_pausa()
     assert ratelimit.jina_origen_circuito() == "timeout"
 
@@ -155,29 +174,31 @@ def test_429_abre_el_circuito_enseguida(monkeypatch):
     assert ratelimit.jina_origen_circuito() == "status_429"
 
 
-def test_reintento_ante_5xx_devuelve_vector(monkeypatch):
+def test_5xx_falla_rapido_sin_reintento(monkeypatch):
     monkeypatch.setenv("JINA_API_KEY", "jina-test-key")
     monkeypatch.setenv("JINA_DAILY_BUDGET", "0")
     llamadas = []
 
-    def handler(request):
-        llamadas.append(request)
-        if len(llamadas) == 1:
-            return httpx.Response(503, json={"detail": "caido"})
-        return httpx.Response(
-            200,
-            json={"data": [{"index": 0, "embedding": [0.0, 0.0, 1.0]}]},
-        )
+    def handler(_request):
+        llamadas.append(1)
+        return httpx.Response(503, json={"detail": "caido"})
 
     jina = JinaEmbeddings(client=_cliente(handler))
-    vector = jina.embed_consulta("consulta con reintento")
-    assert vector.shape == (1, 3)
-    assert np.allclose(vector, [[0.0, 0.0, 1.0]])
-    assert len(llamadas) == 2
+    with pytest.raises(EmbedError, match="http_error"):
+        jina.embed_consulta("consulta con 5xx")
+    assert llamadas == [1]
     assert not ratelimit.jina_en_pausa()
+    assert ratelimit.jina_origen_circuito() == "status_5xx"
+
+    # El segundo 5xx en la ventana abre el circuito.
+    with pytest.raises(EmbedError, match="http_error"):
+        jina.embed_consulta("segunda consulta")
+    assert llamadas == [1, 1]
+    assert ratelimit.jina_en_pausa()
+    assert ratelimit.jina_origen_circuito() == "status_5xx"
 
 
-def test_4xx_no_se_reintenta(monkeypatch):
+def test_4xx_no_abre_el_circuito(monkeypatch):
     monkeypatch.setenv("JINA_API_KEY", "jina-test-key")
     monkeypatch.setenv("JINA_DAILY_BUDGET", "0")
     llamadas = []
@@ -191,6 +212,7 @@ def test_4xx_no_se_reintenta(monkeypatch):
         jina.embed_consulta("hola")
     assert llamadas == [1]
     assert not ratelimit.jina_en_pausa()
+    assert ratelimit.jina_origen_circuito() is None
 
 
 def test_el_cliente_http_se_reutiliza(monkeypatch):

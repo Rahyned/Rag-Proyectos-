@@ -310,7 +310,7 @@ class HybridRetriever:
                 )
                 # La descarga local no se reintenta (tardaría ~50s por consulta).
                 # Jina ya maneja su pausa: 429 enseguida, timeout/5xx al
-                # tercer fallo en 60 s. La consulta siguiente no espera de nuevo.
+                # segundo fallo en 60 s. La consulta siguiente no espera de nuevo.
                 if exc.motivo == "dimension" or type(self._embedder).__name__ == "LocalEmbeddings":
                     self._dense_error = exc.motivo
             except Exception as exc:  # noqa: BLE001 — degradar es lo correcto
