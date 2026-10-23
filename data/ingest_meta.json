@@ -1,6 +1,7 @@
 {
   "corpus_sha256": "dd409e54b259507f04331b9aea7181c4972bdf650ec839b729e499c4b200bf2e",
   "n_chunks": 454,
-  "embed_model": "jinaai/jina-embeddings-v2-base-es",
-  "origen": "api"
+  "embed_model": "@cf/baai/bge-m3",
+  "dims": 1024,
+  "origen": "cloudflare"
 }
