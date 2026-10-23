@@ -8,6 +8,7 @@ recién a los 2 fallos en 60 s. El cupo diario solo baja cuando la llamada
 responde OK. Jina y Cloudflare tienen cupo y circuito separados.
 """
 
+import json
 import logging
 import threading
 import time
@@ -37,6 +38,43 @@ def _loguear_fallo(proveedor: str, motivo: str, inicio: float) -> None:
     """Status y latencia de cada fallo. La key nunca entra al log."""
     latencia = (time.monotonic() - inicio) * 1000
     log.warning("%s fallo: %s (%.0f ms)", proveedor, motivo, latencia)
+
+
+MAX_DETALLE_ERROR = 500
+
+
+def _detalle_error_cloudflare(resp: httpx.Response, account: str,
+                              token: str) -> str:
+    """Cuerpo útil de un 4xx/5xx de Cloudflare, sin secretos y truncado.
+
+    Prioriza `errors[].code/message`; si no hay JSON, usa el texto plano.
+    """
+    try:
+        cuerpo = resp.json()
+    except ValueError:
+        texto = resp.text or ""
+    else:
+        errores = cuerpo.get("errors") if isinstance(cuerpo, dict) else None
+        if isinstance(errores, list) and errores:
+            partes = []
+            for error in errores:
+                if not isinstance(error, dict):
+                    partes.append(str(error))
+                    continue
+                code = error.get("code")
+                mensaje = error.get("message") or error.get("detail") or ""
+                if code is not None:
+                    partes.append(f"{code}: {mensaje}")
+                else:
+                    partes.append(str(mensaje))
+            texto = " | ".join(partes)
+        else:
+            texto = json.dumps(cuerpo, ensure_ascii=False)
+    texto = " ".join(str(texto).split())
+    for secreto, etiqueta in ((token, "[token]"), (account, "[cuenta]")):
+        if secreto:
+            texto = texto.replace(secreto, etiqueta)
+    return texto[:MAX_DETALLE_ERROR]
 
 
 def normalizar(vectors: np.ndarray) -> np.ndarray:
@@ -170,14 +208,18 @@ class JinaEmbeddings:
 
 
 class CloudflareEmbeddings:
-    """Embeddings de Workers AI. La ingesta va en lotes de 50.
+    """Embeddings de Workers AI. La ingesta va en lotes de 20.
 
     El cache y el cupo aplican a consultas, no al lote de ingesta. El
     circuito y el presupuesto son propios (`cloudflare:*`), separados de Jina.
     """
 
     MODEL = CF_EMBED_MODEL
-    BATCH_SIZE = 50
+    # bge-m3 tiene 60k tokens por request. 20 textos de hasta 4000 caracteres
+    # (~2000 tokens en español) dejan margen; `truncate_inputs` cubre el
+    # límite exacto por texto que aplique Cloudflare.
+    BATCH_SIZE = 20
+    MAX_TEXTO_CHARS = 4000
 
     def __init__(self, client: httpx.Client | None = None,
                  cache_size: int = EMBED_CACHE_SIZE) -> None:
@@ -238,7 +280,10 @@ class CloudflareEmbeddings:
         try:
             resp = client.post(
                 url,
-                json={"text": textos},
+                json={
+                    "text": [texto[:self.MAX_TEXTO_CHARS] for texto in textos],
+                    "truncate_inputs": True,
+                },
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=timeout,
             )
@@ -257,7 +302,11 @@ class CloudflareEmbeddings:
                 else "status_5xx" if code >= 500
                 else None
             )
-            _loguear_fallo("cloudflare", f"status {code}", inicio)
+            detalle = _detalle_error_cloudflare(exc.response, account, token)
+            motivo = f"status {code}"
+            if detalle:
+                motivo = f"{motivo} {detalle}"
+            _loguear_fallo("cloudflare", motivo, inicio)
             if origen:
                 ratelimit.anotar_fallo_cloudflare(origen)
             if code in (402, 429):

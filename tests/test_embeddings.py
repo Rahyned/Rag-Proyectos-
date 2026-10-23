@@ -335,7 +335,10 @@ def test_cloudflare_parsea_result_data_y_normaliza(monkeypatch):
 
     def handler(request: httpx.Request) -> httpx.Response:
         llamadas.append(request)
-        assert json.loads(request.content) == {"text": ["uno", "dos"]}
+        assert json.loads(request.content) == {
+            "text": ["uno", "dos"],
+            "truncate_inputs": True,
+        }
         assert str(request.url) == CF_EMBED_URL.format(account_id="cuenta-test")
         assert request.headers["authorization"] == "Bearer cf-test-token"
         return httpx.Response(200, json={
@@ -351,7 +354,7 @@ def test_cloudflare_parsea_result_data_y_normaliza(monkeypatch):
     assert np.allclose(np.linalg.norm(vectores, axis=1), 1.0)
 
 
-def test_cloudflare_ingesta_en_lotes_de_50(monkeypatch):
+def test_cloudflare_ingesta_en_lotes_de_20(monkeypatch):
     _configurar_cloudflare(monkeypatch)
     lotes = []
 
@@ -365,8 +368,25 @@ def test_cloudflare_ingesta_en_lotes_de_50(monkeypatch):
 
     cf = CloudflareEmbeddings(client=_cliente_cloudflare(handler))
     vectores = cf.embed_lote([f"texto {i}" for i in range(120)])
-    assert lotes == [50, 50, 20]
+    assert lotes == [20] * 6
     assert vectores.shape == (120, 2)
+
+
+def test_cloudflare_trunca_textos_largos(monkeypatch):
+    _configurar_cloudflare(monkeypatch)
+    largos = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        textos = json.loads(request.content)["text"]
+        largos.extend(len(texto) for texto in textos)
+        return httpx.Response(200, json={
+            "success": True,
+            "result": {"data": [[1.0, 0.0] for _ in textos]},
+        })
+
+    cf = CloudflareEmbeddings(client=_cliente_cloudflare(handler))
+    cf.embed_lote(["x" * 10_000])
+    assert largos == [CloudflareEmbeddings.MAX_TEXTO_CHARS]
 
 
 def test_cloudflare_sin_key_no_llama(monkeypatch):
@@ -414,3 +434,50 @@ def test_cloudflare_cache_no_repite_la_red(monkeypatch):
     assert len(llamadas) == 1
     assert primero.shape == (1, 2)
     assert np.allclose(primero, segundo)
+
+
+def test_cloudflare_400_loguea_el_cuerpo_sin_secretos(monkeypatch, caplog):
+    _configurar_cloudflare(monkeypatch)
+
+    def bad_request(_request):
+        return httpx.Response(400, json={
+            "success": False,
+            "errors": [{
+                "code": 5006,
+                "message": (
+                    "AiError: required properties at '/' are 'contexts' "
+                    "(cuenta-test, cf-test-token)"
+                ),
+            }],
+            "result": {},
+        })
+
+    cf = CloudflareEmbeddings(client=_cliente_cloudflare(bad_request))
+    with caplog.at_level(logging.WARNING, logger="rag.embeddings"):
+        with pytest.raises(EmbedError, match="http_error"):
+            cf.embed_lote(["hola"])
+    texto = " ".join(caplog.messages)
+    assert "status 400" in texto
+    assert "5006" in texto
+    assert "required properties" in texto
+    assert "cf-test-token" not in texto
+    assert "cuenta-test" not in texto
+
+
+def test_cloudflare_detalle_del_error_se_trunca(monkeypatch, caplog):
+    _configurar_cloudflare(monkeypatch)
+
+    def bad_request(_request):
+        return httpx.Response(400, json={
+            "success": False,
+            "errors": [{"code": 5006, "message": "x" * 800}],
+            "result": {},
+        })
+
+    cf = CloudflareEmbeddings(client=_cliente_cloudflare(bad_request))
+    with caplog.at_level(logging.WARNING, logger="rag.embeddings"):
+        with pytest.raises(EmbedError, match="http_error"):
+            cf.embed_lote(["hola"])
+    texto = " ".join(caplog.messages)
+    assert texto.count("x") <= 500
+    assert "x" * 501 not in texto

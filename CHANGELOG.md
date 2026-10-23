@@ -4,6 +4,41 @@
 
 ### Added
 
+- `scripts/ingest.py --limit N`: procesa solo los primeros N chunks y no
+  escribe chunks, índice ni meta (dry run para diagnosticar la ingesta).
+- Tests del log de errores de Cloudflare, del lote de 20, del truncado de
+  textos y del dry run.
+
+### Changed
+
+- La ingesta con Cloudflare usa lotes de 20 (antes 50) y textos de hasta
+  4000 caracteres; el body incluye `truncate_inputs: true`.
+- README documenta el dry run con `--limit 3` y el lote nuevo.
+
+### Fixed
+
+- Un 400 de Cloudflare solo decía `status 400` sin motivo. Ahora el log
+  incluye `errors[].code` y `errors[].message`, truncado a 500 caracteres y
+  sin token ni account id.
+- La ingesta podía fallar por lote o por texto demasiado largo para bge-m3.
+
+### Files
+
+- `rag/embeddings.py`
+- `scripts/ingest.py`
+- `tests/test_embeddings.py`
+- `tests/test_ingest.py`
+- `README.md`
+- `CHANGELOG.md`
+
+### Tests
+
+`151 passed, 1 skipped`.
+
+## 2026-10-23 — main
+
+### Added
+
 - Proveedor `cloudflare` de embeddings de consulta con
   `@cf/baai/bge-m3` (1024d) y reindexado en lotes de 50.
 - Cupo y circuito propios de Cloudflare: `CF_DAILY_BUDGET`,

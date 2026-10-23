@@ -2,6 +2,8 @@
 
 Uso:
   python scripts/ingest.py [--sin-embed] [--provider local|api|cloudflare]
+  python scripts/ingest.py --limit 3 --provider cloudflare
+    prueba los primeros N chunks y no escribe chunks, índice ni meta.
   python scripts/ingest.py --check
     valida el manifiesto, corre el guardrail de secretos y compara el hash
     del corpus con el que quedó guardado al ingerir. No reindexa.
@@ -179,7 +181,7 @@ def chequear() -> None:
     print(f"OK corpus {digest[:12]} ({len(lineas)} chunks)")
 
 
-def embedir(chunks: list, provider: str) -> None:
+def embedir(chunks: list, provider: str, dry_run: bool = False) -> None:
     from rag.embeddings import (CloudflareEmbeddings, JinaEmbeddings,
                                 LocalEmbeddings)
 
@@ -199,13 +201,19 @@ def embedir(chunks: list, provider: str) -> None:
         sys.exit(f"provider desconocido: {provider}")
 
     vectores = modelo.embed_lote([c.text for c in chunks])
+    dims = int(vectores.shape[1])
+    if dry_run:
+        print(
+            f"OK dry run -> {len(chunks)} chunks, dim={dims}, {origen} "
+            "(sin escribir chunks, índice ni meta)"
+        )
+        return
 
     import faiss
 
-    index = faiss.IndexFlatIP(int(vectores.shape[1]))
+    index = faiss.IndexFlatIP(dims)
     index.add(np.ascontiguousarray(vectores))
     faiss.write_index(index, str(INDEX_PATH))
-    dims = int(vectores.shape[1])
     escribir_meta(len(chunks), origen, embed_model, dims)
     print(f"OK -> {INDEX_PATH} ({index.ntotal} vectores, dim={dims}, {origen})")
 
@@ -218,9 +226,16 @@ def main() -> None:
         "--provider", choices=("local", "api", "cloudflare"), default="local",
         help="De dónde salen los vectores del índice",
     )
+    parser.add_argument(
+        "--limit", type=int, metavar="N",
+        help=("Procesa solo los primeros N chunks y no escribe chunks, "
+              "índice ni meta (dry run)"),
+    )
     parser.add_argument("--check", action="store_true",
                         help="Valida manifiesto, secretos y hash; no reindexa")
     args = parser.parse_args()
+    if args.limit is not None and args.limit <= 0:
+        sys.exit("--limit debe ser un entero mayor que 0")
 
     try:
         if args.check:
@@ -229,6 +244,17 @@ def main() -> None:
         chunks = construir_chunks()
     except (ManifiestoError, SecretosError) as exc:
         sys.exit(str(exc))
+
+    if args.limit is not None:
+        chunks = chunks[:args.limit]
+        if args.sin_embed:
+            print(
+                f"dry run -> {len(chunks)} chunks "
+                "(sin escribir chunks, índice ni meta)"
+            )
+            return
+        embedir(chunks, args.provider, dry_run=True)
+        return
 
     escribir_chunks(chunks)
     if args.sin_embed:

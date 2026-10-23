@@ -1,6 +1,7 @@
 """Manifiesto multi-proyecto y hash del corpus."""
 
 import json
+import sys
 
 import pytest
 
@@ -72,6 +73,32 @@ def test_manifiesto_archivo_inexistente(tmp_path):
     }]}
     with pytest.raises(ManifiestoError, match="no existe"):
         validar(raw, tmp_path)
+
+
+def test_limit_hace_dry_run_sin_escribir(monkeypatch):
+    import scripts.ingest as ing
+
+    chunks = [object() for _ in range(5)]
+    llamadas = []
+    monkeypatch.setattr(ing, "construir_chunks", lambda: chunks)
+    monkeypatch.setattr(
+        ing, "escribir_chunks",
+        lambda c: llamadas.append(("chunks", len(c))),
+    )
+    monkeypatch.setattr(
+        ing, "embedir",
+        lambda c, p, dry_run=False: llamadas.append(
+            ("embedir", len(c), p, dry_run)
+        ),
+    )
+    monkeypatch.setattr(
+        sys, "argv",
+        ["ingest.py", "--limit", "3", "--provider", "cloudflare"],
+    )
+
+    ing.main()
+
+    assert llamadas == [("embedir", 3, "cloudflare", True)]
 
 
 def test_hash_de_corpus_esta_al_dia():

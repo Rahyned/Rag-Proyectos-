@@ -28,7 +28,7 @@ Pregunta → (filtro de proyecto) → FAISS + BM25 → RRF → top-k
   `jina-embeddings-v2-base-es` (768d) en desarrollo/ingesta local. En Vercel,
   `EMBEDDINGS_PROVIDER=cloudflare` pide los vectores a Workers AI
   (`CF_ACCOUNT_ID` + `CF_API_TOKEN`, timeout 2 s, cliente HTTP reutilizado y
-  lotes de 50 en la ingesta). Si falta una credencial, se agota
+  lotes de 20 en la ingesta). Si falta una credencial, se agota
   `CF_DAILY_BUDGET`, hay un error o se vence el timeout, la consulta sigue en
   BM25. Un timeout, un 5xx o un 429 pausan Cloudflare 90 s (en memoria y en
   Upstash, si está) con claves propias (`cloudflare:circuit`) y el cupo solo
@@ -50,7 +50,7 @@ Pregunta → (filtro de proyecto) → FAISS + BM25 → RRF → top-k
 | Embeddings | `@cf/baai/bge-m3` (1024d) en Workers AI; Jina 768d o fastembed local como alternativas |
 | Generación | Opcional: Groq (compatible OpenAI) por env vars `LLM_*` |
 | UI | React 19 + Vite 8 + oxlint (ES, sin TypeScript) |
-| Tests | pytest (147 passed, 1 skipped; gold_test de 44 preguntas ES) |
+| Tests | pytest (151 passed, 1 skipped; gold_test de 44 preguntas ES) |
 | CI | GitHub Actions: pytest con `uv sync --frozen` + oxlint + build del cliente |
 | Deploy | Vercel: services `web` + `api` en un proyecto + proxy del portafolio |
 
@@ -144,6 +144,16 @@ finally {
 
 y commiteá juntos `data/index.faiss`, `data/ingest_meta.json` (y
 `data/chunks.jsonl` / `data/corpus.sha256` si cambiaron).
+
+Para diagnosticar sin tocar `data/`:
+
+```powershell
+uv run python scripts/ingest.py --provider cloudflare --limit 3
+```
+
+`--limit N` procesa solo los primeros N chunks y no escribe chunks, índice ni
+meta. Si Cloudflare responde un 4xx/5xx, el log incluye `errors[].code` y
+`errors[].message` (truncado a 500 caracteres, sin token ni account id).
 
 El índice local de desarrollo se genera con `uv run python scripts/ingest.py`
 (fastembed, ONNX ~640 MB). Jina sigue como alternativa: con `JINA_API_KEY`
