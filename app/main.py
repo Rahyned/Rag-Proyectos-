@@ -109,6 +109,7 @@ def health():
         "dense": dense_enabled(),
         "embeddings": embeddings_provider(),
         "dense_error": rag_service.last_dense_error(),
+        "dense_error_origen": ratelimit.jina_origen_circuito(),
     }
 
 

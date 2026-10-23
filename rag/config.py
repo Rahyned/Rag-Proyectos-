@@ -62,5 +62,5 @@ def dense_enabled() -> bool:
 # coseno de los mismos textos da ≥ 0.99; si no, el índice se rehace con la API.
 JINA_EMBED_MODEL = "jina-embeddings-v2-base-es"
 JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings"
-EMBED_TIMEOUT = 3.0
+EMBED_TIMEOUT = 6.0
 EMBED_CACHE_SIZE = 500

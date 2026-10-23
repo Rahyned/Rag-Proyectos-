@@ -15,6 +15,17 @@ def test_health():
     assert data["model"]
     assert isinstance(data["dense"], bool)
     assert data["dense_error"] is None or isinstance(data["dense_error"], str)
+    assert data["dense_error_origen"] is None or isinstance(
+        data["dense_error_origen"], str
+    )
+
+
+def test_health_expone_el_origen_del_circuito():
+    from app import ratelimit
+
+    ratelimit.abrir_pausa_jina("status_429")
+    data = client.get("/api/health").json()
+    assert data["dense_error_origen"] == "status_429"
 
 
 def test_health_sin_paths_locales(monkeypatch):
