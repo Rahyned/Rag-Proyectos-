@@ -106,6 +106,21 @@ def test_que_es_stella_incluye_la_introduccion(monkeypatch):
     assert 4 in pages[:3]
 
 
+@pytest.mark.parametrize("metodo", ("search", "bm25"))
+@pytest.mark.parametrize("consulta", (
+    "como funciona stella?",
+    "para que sirve stella",
+    "¿Qué es STELLA?",
+))
+def test_panorama_prioriza_la_introduccion(monkeypatch, metodo, consulta):
+    """Las preguntas de panorama traen «¿Qué es STELLA?» antes que §3.1."""
+    monkeypatch.setenv("RAG_DENSE", "0")
+    hits = getattr(_retriever(), metodo)(consulta, 5)
+    assert hits, consulta
+    assert hits[0]["page"] == 4
+    assert "¿Qué es STELLA?" in (hits[0]["seccion"] or "")
+
+
 def test_que_es_funciona_en_los_cuatro(monkeypatch):
     """«¿Qué es X?» responde en cada proyecto, no solo en STELLA."""
     monkeypatch.setenv("RAG_DENSE", "0")

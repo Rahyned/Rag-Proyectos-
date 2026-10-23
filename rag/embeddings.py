@@ -2,13 +2,14 @@
 
 `api` usa el mismo modelo que el índice (`jina-embeddings-v2-base-es`).
 Si falta la key, se agota el cupo, la API responde 4xx/5xx o tarda más de
-3 s, `EmbedError` lleva solo el motivo: el retriever cae a BM25.
-Un timeout, un 5xx o un 429 abren una pausa de 10 minutos y el cupo
-diario solo baja cuando la llamada responde OK.
+6 s, `EmbedError` lleva solo el motivo: el retriever cae a BM25.
+Un 429 abre la pausa de Jina enseguida; un timeout o un 5xx recién a los
+3 fallos en 60 s. El cupo diario solo baja cuando la llamada responde OK.
 """
 
 import logging
 import threading
+import time
 from collections import OrderedDict
 
 import httpx
@@ -25,9 +26,16 @@ log = logging.getLogger("rag.embeddings")
 class EmbedError(Exception):
     """Fallo del canal denso. `motivo` es un código corto, nunca la key."""
 
-    def __init__(self, motivo: str) -> None:
+    def __init__(self, motivo: str, reintentable: bool = False) -> None:
         super().__init__(motivo)
         self.motivo = motivo
+        self.reintentable = reintentable
+
+
+def _loguear_fallo(motivo: str, inicio: float) -> None:
+    """Status y latencia de cada fallo. La key nunca entra al log."""
+    latencia = (time.monotonic() - inicio) * 1000
+    log.warning("jina fallo: %s (%.0f ms)", motivo, latencia)
 
 
 def normalizar(vectors: np.ndarray) -> np.ndarray:
@@ -88,7 +96,13 @@ class JinaEmbeddings:
             raise EmbedError("circuito")
         if not ratelimit.puede_llamar_jina():
             raise EmbedError("presupuesto")
-        matriz = self._pedir([texto], EMBED_TIMEOUT)
+        try:
+            matriz = self._pedir([texto], EMBED_TIMEOUT)
+        except EmbedError as exc:
+            # Un timeout o un 5xx se reintenta una vez; un 4xx no.
+            if not exc.reintentable or ratelimit.jina_en_pausa():
+                raise
+            matriz = self._pedir([texto], EMBED_TIMEOUT)
         ratelimit.anotar_llamada_jina()
         with self._lock:
             self._cache[texto] = matriz[0].copy()
@@ -116,6 +130,7 @@ class JinaEmbeddings:
             "normalized": True,
         }
         client = self._http()
+        inicio = time.monotonic()
         try:
             resp = client.post(
                 JINA_EMBED_URL,
@@ -128,19 +143,24 @@ class JinaEmbeddings:
         except EmbedError:
             raise
         except httpx.TimeoutException:
-            log.warning("jina no disponible: timeout")
-            ratelimit.abrir_pausa_jina()
-            raise EmbedError("timeout") from None
+            _loguear_fallo("timeout", inicio)
+            ratelimit.anotar_fallo_jina("timeout")
+            raise EmbedError("timeout", reintentable=True) from None
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
-            log.warning("jina no disponible: status %s", code)
-            if code == 429 or code >= 500:
-                ratelimit.abrir_pausa_jina()
+            origen = (
+                "status_429" if code == 429
+                else "status_5xx" if code >= 500
+                else None
+            )
+            _loguear_fallo(f"status {code}", inicio)
+            if origen:
+                ratelimit.anotar_fallo_jina(origen)
             if code in (402, 429):
                 raise EmbedError("cuota") from None
-            raise EmbedError("http_error") from None
+            raise EmbedError("http_error", reintentable=code >= 500) from None
         except (httpx.HTTPError, ValueError):
-            log.warning("jina no disponible: http_error")
+            _loguear_fallo("http_error", inicio)
             raise EmbedError("http_error") from None
         data = cuerpo.get("data") if isinstance(cuerpo, dict) else None
         if not isinstance(data, list) or len(data) != len(textos):

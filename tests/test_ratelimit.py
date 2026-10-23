@@ -121,6 +121,25 @@ def test_ip_activa_no_se_reinicia_al_desalojar(monkeypatch):
     assert exc.value.status_code == 429
 
 
+def test_jina_en_pausa_no_rearma_la_pausa_local(monkeypatch):
+    """La clave de Redis manda con su TTL: no se renueva la pausa local."""
+    _activar_redis(monkeypatch)
+    monkeypatch.setattr(
+        ratelimit, "_redis_pipeline",
+        lambda commands: [{"result": "1"}],
+    )
+    assert ratelimit.jina_en_pausa()
+    assert ratelimit._jina_pause_until == 0.0
+
+    # Redis expira la clave: la pausa se termina aunque la consulta anterior
+    # haya visto el circuito abierto.
+    monkeypatch.setattr(
+        ratelimit, "_redis_pipeline",
+        lambda commands: [{"result": None}],
+    )
+    assert not ratelimit.jina_en_pausa()
+
+
 def test_hits_viejos_expiran_en_la_ventana(monkeypatch):
     req = _request({"x-real-ip": "10.2.2.2"})
     for _ in range(10):

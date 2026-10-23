@@ -31,9 +31,14 @@ _MAX_IPS = 10_000
 # 429s recientes de Groq → circuito abierto.
 GROQ_TRIP = 3
 GROQ_WINDOW_SECONDS = 60.0
-# Timeout, 5xx o 429 de Jina: no se vuelve a esperar el timeout hasta que pase.
-JINA_CIRCUIT_SECONDS = 10 * 60
+# 429 de Jina abre el circuito enseguida; timeout/5xx recién a los 3 en 60 s.
+JINA_FAIL_TRIP = 3
+JINA_FAIL_WINDOW_SECONDS = 60.0
+# La pausa dura lo mismo en memoria y en Redis: la siguiente consulta no
+# vuelve a esperar el timeout.
+JINA_CIRCUIT_SECONDS = 90
 _JINA_CIRCUIT_KEY = "jina:circuit"
+_JINA_ORIGENES = frozenset(("timeout", "status_429", "status_5xx"))
 
 # La clave de la ventana fija vive un poco más que la ventana, para que el
 # INCR de los últimos segundos no expire antes del cambio de bucket.
@@ -53,6 +58,8 @@ _hits: dict[str, deque[float]] = defaultdict(deque)
 _groq_429: deque[float] = deque(maxlen=64)
 _budget: dict[str, int] = {}
 _jina_pause_until = 0.0
+_jina_fallos: deque[float] = deque(maxlen=64)
+_jina_origen: str | None = None
 
 
 def client_ip(request: Request) -> str:
@@ -303,8 +310,12 @@ def anotar_llamada_jina() -> None:
 
 
 def jina_en_pausa() -> bool:
-    """True si un fallo reciente dejó la API en pausa (memoria o Upstash)."""
-    global _jina_pause_until
+    """True si un fallo reciente dejó la API en pausa (memoria o Upstash).
+
+    Si la clave existe en Redis, no se rearma la pausa local: manda el TTL
+    que le queda a Redis, no una ventana nueva de JINA_CIRCUIT_SECONDS.
+    """
+    global _jina_origen
     now = time.monotonic()
     with _lock:
         if now < _jina_pause_until:
@@ -316,27 +327,65 @@ def jina_en_pausa() -> bool:
     except Exception as exc:  # noqa: BLE001 — sin Redis, vale la memoria
         log.warning("Redis no disponible (%s); circuito de jina en memoria", exc)
         return False
-    if not data[0]["result"]:
-        return False
-    with _lock:
-        _jina_pause_until = time.monotonic() + JINA_CIRCUIT_SECONDS
-    return True
+    valor = data[0]["result"]
+    if valor in _JINA_ORIGENES:
+        # Otra instancia abrió el circuito: el origen viaja en la clave.
+        with _lock:
+            _jina_origen = valor
+    return bool(valor)
 
 
-def abrir_pausa_jina() -> None:
-    """Pausa Jina JINA_CIRCUIT_SECONDS. La próxima consulta no espera el timeout."""
-    global _jina_pause_until
+def abrir_pausa_jina(origen: str | None = None) -> None:
+    """Pausa Jina JINA_CIRCUIT_SECONDS. La próxima consulta no espera el timeout.
+
+    `origen` es el motivo que abrió el circuito (timeout, status_429 o
+    status_5xx); /api/health lo expone como dense_error_origen.
+    """
+    global _jina_pause_until, _jina_origen
     hasta = time.monotonic() + JINA_CIRCUIT_SECONDS
     with _lock:
         _jina_pause_until = hasta
+        if origen:
+            _jina_origen = origen
     if not _redis_configured():
         return
     try:
         _redis_pipeline([[
-            "SET", _JINA_CIRCUIT_KEY, "1", "EX", JINA_CIRCUIT_SECONDS,
+            "SET", _JINA_CIRCUIT_KEY, origen or "1",
+            "EX", JINA_CIRCUIT_SECONDS,
         ]])
     except Exception as exc:  # noqa: BLE001
         log.warning("no se pudo abrir el circuito de jina en Redis (%s)", exc)
+
+
+def anotar_fallo_jina(origen: str) -> None:
+    """Registra un fallo de Jina y abre el circuito cuando corresponde.
+
+    Un 429 abre enseguida. Un timeout o un 5xx solo abre al tercero dentro
+    de JINA_FAIL_WINDOW_SECONDS: un fallo aislado no corta el canal denso.
+    """
+    if origen == "status_429":
+        abrir_pausa_jina(origen)
+        return
+    now = time.monotonic()
+    with _lock:
+        while (
+            _jina_fallos
+            and now - _jina_fallos[0] > JINA_FAIL_WINDOW_SECONDS
+        ):
+            _jina_fallos.popleft()
+        _jina_fallos.append(now)
+        abrir = len(_jina_fallos) >= JINA_FAIL_TRIP
+        if abrir:
+            _jina_fallos.clear()
+    if abrir:
+        abrir_pausa_jina(origen)
+
+
+def jina_origen_circuito() -> str | None:
+    """Motivo que abrió el circuito (timeout / status_429 / status_5xx)."""
+    with _lock:
+        return _jina_origen
 
 
 def note_groq_429() -> None:
@@ -354,9 +403,11 @@ def groq_limited() -> bool:
 
 def reset() -> None:
     """Solo para tests."""
-    global _jina_pause_until
+    global _jina_pause_until, _jina_origen
     with _lock:
         _hits.clear()
         _groq_429.clear()
         _budget.clear()
+        _jina_fallos.clear()
         _jina_pause_until = 0.0
+        _jina_origen = None

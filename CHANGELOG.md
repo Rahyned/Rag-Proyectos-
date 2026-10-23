@@ -1,5 +1,53 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-22 — fix/gold-solutionscars
+
+### Added
+
+- Reintento único en `embed_consulta` ante timeout o 5xx de Jina. Un 4xx
+  no se reintenta.
+- Circuito de Jina por fallos: 429 abre enseguida; timeout o 5xx recién
+  al tercero dentro de 60 s. Un fallo aislado ya no apaga el canal denso.
+- `/api/health` expone `dense_error_origen` (`timeout`, `status_429` o
+  `status_5xx`) además de `dense_error`. El origen se guarda también en la
+  clave de Redis del circuito.
+- Tests para el circuito, el reintento, el TTL de Redis, el origen en
+  health y la prioridad de la introducción.
+
+### Changed
+
+- `EMBED_TIMEOUT` pasa de 3.0 a 6.0 s y `JINA_CIRCUIT_SECONDS` de 600 a
+  90 s.
+- `_contiene_que_es` se generaliza en `_pide_panorama` para «qué es»,
+  «cómo funciona», «qué hace», «para qué sirve», «contame de/sobre» y
+  «de qué se trata». `_indice_intro` sigue usando la función vieja.
+- `jina_en_pausa` ya no rearma la pausa local por la duración completa
+  cuando la clave de Redis existe: manda el TTL que le queda a Redis.
+
+### Fixed
+
+- El canal denso dejaba de aportar durante 10 minutos por un solo timeout.
+- «¿Cómo funciona STELLA?» y «¿Para qué sirve STELLA?» devuelven primero
+  la introducción, no la tabla de §3.1 ni las FAQ de la luz o la sesión.
+- Cada fallo de Jina loguea status y latencia, nunca la key.
+
+### Files
+
+- `app/main.py`
+- `app/ratelimit.py`
+- `rag/config.py`
+- `rag/embeddings.py`
+- `rag/hybrid.py`
+- `tests/test_embeddings.py`
+- `tests/test_health.py`
+- `tests/test_ratelimit.py`
+- `tests/test_retriever.py`
+
+### Tests
+
+`131 passed, 1 skipped`. El gold no baja: tuning BM25 hit@3 36/44 y hit@5
+38/44; test BM25 hit@3 36/44 y hit@5 38/44, igual que antes del cambio.
+
 ## 2026-10-13 — fix/gold-solutionscars
 
 ### Changed

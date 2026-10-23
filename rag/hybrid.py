@@ -179,6 +179,31 @@ def _contiene_que_es(text: str, title: str) -> bool:
     return False
 
 
+# Preguntas de panorama: piden la introducción del documento, no una sección.
+_PANORAMA_PREFIJO = (
+    r"(?:que es|como funciona|que hace|para que sirve"
+    r"|contame (?:de|sobre)|de que se trata)"
+)
+
+
+def _pide_panorama(query: str, title: str) -> bool:
+    """True si la consulta pregunta de qué se trata el documento.
+
+    Cubre «qué es X», «cómo funciona X», «qué hace X», «para qué sirve X»,
+    «contame de/sobre X» y «de qué se trata X». Compara en plano (sin
+    tildes y en minúscula) contra las palabras útiles del título.
+    """
+    plano = _plano(query)
+    palabras = [
+        p for p in _TOKEN_RE.findall(_plano(title))
+        if p not in _GENERICOS_NOMBRE and len(p) >= 4
+    ]
+    for palabra in palabras:
+        if re.search(rf"{_PANORAMA_PREFIJO}\s+{re.escape(palabra)}\b", plano):
+            return True
+    return False
+
+
 class HybridRetriever:
     def __init__(self, chunks_path: Path = CHUNKS_PATH,
                  index_path: Path = INDEX_PATH,
@@ -235,7 +260,7 @@ class HybridRetriever:
         if (
             doc_id
             and self._doc_en(doc_id, allowed)
-            and _contiene_que_es(query, _documentos().get(doc_id, {}).get("title", ""))
+            and _pide_panorama(query, _documentos().get(doc_id, {}).get("title", ""))
         ):
             return self._hits_priorizando_intro(scores, top_k, doc_id)
         return self._hits(scores, top_k, engine="bm25")
@@ -256,10 +281,11 @@ class HybridRetriever:
         if (
             doc_id
             and self._doc_en(doc_id, allowed)
-            and _contiene_que_es(query, _documentos().get(doc_id, {}).get("title", ""))
+            and _pide_panorama(query, _documentos().get(doc_id, {}).get("title", ""))
         ):
-            # «¿Qué es X?» prioriza la introducción aunque el término X esté
-            # en casi todo el manual y el BM25 no la ponga primera.
+            # «¿Qué es X?», «¿cómo funciona X?» y similares priorizan la
+            # introducción aunque el término X esté en casi todo el manual
+            # y el BM25 no la ponga primera.
             return self._hits_priorizando_intro(lex, top_k, doc_id)
         if top1 < MIN_TOP1_SCORE:
             if (
@@ -283,8 +309,8 @@ class HybridRetriever:
                     "embeddings no disponible (%s); usando BM25", exc.motivo
                 )
                 # La descarga local no se reintenta (tardaría ~50s por consulta).
-                # Un timeout, 5xx o 429 de Jina abre una pausa: la consulta
-                # siguiente no vuelve a esperar el timeout.
+                # Jina ya maneja su pausa: 429 enseguida, timeout/5xx al
+                # tercer fallo en 60 s. La consulta siguiente no espera de nuevo.
                 if exc.motivo == "dimension" or type(self._embedder).__name__ == "LocalEmbeddings":
                     self._dense_error = exc.motivo
             except Exception as exc:  # noqa: BLE001 — degradar es lo correcto
