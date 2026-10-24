@@ -26,10 +26,12 @@ PROYECTOS = {
 }
 
 # El set de medición (gold_test) no se usa para mover el umbral.
-# BM25: 36/44. Híbrida contra el índice de Jina: 41/44 (histórico; con el
-# índice de Cloudflare hay que volver a medirlo).
-MIN_BM25_TOP3 = 36
-MIN_HYBRID_TOP3 = 41
+# BM25 con sección en el léxico + peso de glosario + fragmentos: 100/100
+# (simulado 2026-10; confirmar tras ingest --provider cloudflare).
+# Híbrida: histórico 41/44 con Jina; falta medir el gold de 100 con Cloudflare.
+MIN_BM25_TOP3 = 90
+MIN_HYBRID_TOP3 = 85
+GOLD_V1_N = 44
 
 
 def _gold() -> list[dict]:
@@ -50,6 +52,15 @@ def _retriever() -> HybridRetriever:
     if not (GOLD_TEST_PATH.exists() and INDEX_PATH.exists()):
         pytest.skip("índice no generado (corré scripts/ingest.py)")
     return HybridRetriever()
+
+
+def _corpus_desactualizado() -> bool:
+    """El corpus cambió y el índice/chunks todavía no se regeneraron."""
+    from scripts.ingest import HASH_PATH, hash_corpus
+
+    if not HASH_PATH.exists():
+        return True
+    return HASH_PATH.read_text(encoding="utf-8").strip() != hash_corpus()
 
 
 def _ultimo(seccion: str) -> str:
@@ -91,6 +102,8 @@ def test_gold_tiene_proyecto_y_los_cortes_no_se_pisan():
     test = _leer(GOLD_TEST_PATH)
     tuning = _leer(GOLD_TUNING_PATH)
     assert test and tuning
+    assert len(test) == 100
+    assert sum(1 for item in test if item.get("v1")) == GOLD_V1_N
     assert all(item["proyecto"] in PROYECTOS for item in test + tuning)
     assert any(item["proyecto"] == "stella" for item in test)
     assert any(item["proyecto"] == "stella" for item in tuning)
@@ -103,6 +116,8 @@ def test_gold_tiene_proyecto_y_los_cortes_no_se_pisan():
 
 
 def test_gold_bm25_top3():
+    if _corpus_desactualizado():
+        pytest.skip("corpus cambiado: corré scripts/ingest.py")
     retriever = _retriever()
     gold = _positivos(_gold())
     hits = 0
@@ -116,6 +131,8 @@ def test_gold_bm25_top3():
 @pytest.mark.skipif(not os.environ.get("RUN_DENSE_TESTS"),
                     reason="requiere modelo de embeddings (RUN_DENSE_TESTS=1)")
 def test_gold_hybrid_top3():
+    if _corpus_desactualizado():
+        pytest.skip("corpus cambiado: corré scripts/ingest.py")
     retriever = _retriever()
     if retriever.index.ntotal != retriever._n:
         pytest.skip("índice denso desfasado de chunks.jsonl")

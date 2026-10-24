@@ -15,7 +15,6 @@
   {"q": "¿Cómo hago un backup?", "proyecto": "stella", "doc_id": "manual-stella", "section": "Cómo hago una copia de seguridad en STELLA"},
   {"q": "¿cómo se juega al ajedrez?", "proyecto": "stella", "doc_id": "manual-stella", "vacio": true},
   {"q": "¿cómo preparo una pizza casera?", "proyecto": "stella", "doc_id": "manual-stella", "vacio": true},
-
   {"q": "¿qué onda con la caja?", "proyecto": "solutionscars", "doc_id": "solutionscars", "sections": ["¿Qué onda con la caja?", "Caja y planilla diaria"]},
   {"q": "¿sirve para facturar?", "proyecto": "solutionscars", "doc_id": "solutionscars", "section": "¿Sirve para facturar?"},
   {"q": "en soluciones cars ¿qué es el CAE?", "proyecto": "solutionscars", "doc_id": "solutionscars", "section": "¿Qué es el CAE?"},
@@ -31,7 +30,6 @@
   {"q": "La factura salió con error de AFIP", "proyecto": "solutionscars", "doc_id": "solutionscars", "section": "La factura salió con error de AFIP"},
   {"q": "¿cómo pido una corona de porcelana?", "proyecto": "solutionscars", "doc_id": "solutionscars", "vacio": true},
   {"q": "¿quién ganó el oscar de mejor película?", "proyecto": "solutionscars", "doc_id": "solutionscars", "vacio": true},
-
   {"q": "¿qué onda con los precios?", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "¿Qué onda con los precios?"},
   {"q": "¿puedo mandar varias coronas juntas?", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "¿Puedo mandar varias coronas juntas?"},
   {"q": "¿sirve para facturar?", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "¿Sirve para facturar?"},
@@ -39,7 +37,6 @@
   {"q": "¿Qué es Laboratorio RioDent?", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "¿Qué es Laboratorio RioDent?"},
   {"q": "¿cómo preparo ravioles caseros?", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "vacio": true},
   {"q": "¿cuál es la capital de Noruega?", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "vacio": true},
-
   {"q": "¿qué onda con el Profesor Oak?", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "section": "¿Qué onda con el Profesor Oak?"},
   {"q": "¿publican precios?", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "section": "¿Cuánto sale?"},
   {"q": "¿sirve para facturar?", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "section": "¿Sirve para facturar?"},
@@ -47,25 +44,11 @@
   {"q": "¿Qué es portafolio-web?", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "sections": ["Qué es", "¿Qué es esta página?", "portafolio-web"]},
   {"q": "¿cómo preparo ravioles caseros?", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "vacio": true},
   {"q": "¿quién ganó el mundial de fútbol?", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "vacio": true},
-
-  {"q": "¿sirve para facturar?", "proyecto": "todos", "acepta": [
-    {"doc_id": "solutionscars", "section": "¿Sirve para facturar?"},
-    {"doc_id": "solutionscars", "section": "CAE"},
-    {"doc_id": "laboratorio-riodent", "section": "¿Sirve para facturar?"},
-    {"doc_id": "portafolio-web", "section": "¿Sirve para facturar?"}
-  ]},
+  {"q": "¿sirve para facturar?", "proyecto": "todos", "acepta": [{"doc_id": "solutionscars", "section": "¿Sirve para facturar?"}, {"doc_id": "solutionscars", "section": "CAE"}, {"doc_id": "laboratorio-riodent", "section": "¿Sirve para facturar?"}, {"doc_id": "portafolio-web", "section": "¿Sirve para facturar?"}]},
   {"q": "cuánto cuesta un sitio", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "section": "¿Cuánto sale?"},
   {"q": "precio de una web", "proyecto": "portafolio-web", "doc_id": "portafolio-web", "section": "¿Cuánto sale?"},
   {"q": "quiero encargar un trabajo al laboratorio", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "¿Cómo hago un pedido?"},
-  {"q": "colorimetría", "proyecto": "laboratorio-riodent", "doc_id": "laboratorio-riodent", "section": "Pedir una toma de color en Laboratorio RioDent"},
-  {"q": "hacer un respaldo", "proyecto": "todos", "acepta": [
-    {"doc_id": "manual-stella", "page": 31},
-    {"doc_id": "solutionscars", "section": "Copias de seguridad y actualizaciones"},
-    {"doc_id": "solutionscars", "section": "¿Cómo hago una copia de seguridad?"}
-  ]},
-
-  {"q": "¿Cómo hago una copia de seguridad?", "proyecto": "todos", "acepta": [
-    {"doc_id": "manual-stella", "page": 31},
-    {"doc_id": "solutionscars", "section": "¿Cómo hago una copia de seguridad?"}
-  ]}
+  {"q": "colorimetría", "proyecto": "laboratorio-riodent", "acepta": [{"doc_id": "laboratorio-riodent", "section": "¿Cómo pido la toma de color?"}, {"doc_id": "laboratorio-riodent", "section": "Pedir una toma de color en Laboratorio RioDent"}, {"doc_id": "laboratorio-riodent", "section": "Toma de color de Laboratorio RioDent"}]},
+  {"q": "hacer un respaldo", "proyecto": "todos", "acepta": [{"doc_id": "manual-stella", "page": 31}, {"doc_id": "solutionscars", "section": "Copias de seguridad y actualizaciones"}, {"doc_id": "solutionscars", "section": "¿Cómo hago una copia de seguridad?"}]},
+  {"q": "¿Cómo hago una copia de seguridad?", "proyecto": "todos", "acepta": [{"doc_id": "manual-stella", "page": 31}, {"doc_id": "solutionscars", "section": "¿Cómo hago una copia de seguridad?"}]}
 ]

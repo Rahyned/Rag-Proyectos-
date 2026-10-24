@@ -8,9 +8,10 @@ denso: el modelo local (ONNX) no se carga.
 modo `replace` y `fuse` con pesos 0.3/0.5/0.7, cada uno con `RERANK_TOP_N`
 10 y 20, siempre con top 3 y top 5. Los resultados del reranker se cachean
 por (consulta, pool), así la matriz completa gasta una llamada por consulta
-y por `RERANK_TOP_N` (44 × 2 = 88), no una por tabla. Necesita
+y por `RERANK_TOP_N` (tamaño del gold × 2), no una por tabla. Necesita
 `CF_ACCOUNT_ID` y `CF_API_TOKEN`; sin credenciales la comparación se omite
-(no se inventan números).
+(no se inventan números). Con `--rerank` también imprime el corte `v1`
+(los 44 casos viejos) frente al gold completo.
 """
 
 from __future__ import annotations
@@ -132,12 +133,38 @@ def _configurar_rerank(*, enabled: bool, mode: str = "fuse",
     os.environ["RERANK_TOP_N"] = str(top_n)
 
 
+def _resumen_gold(retriever, entries: list[dict], metodo: str) -> None:
+    """Corta el gold por `v1` y completo: una fila por corte, top 3/5."""
+    v1 = [entry for entry in entries if entry.get("v1")]
+    buscar = retriever.bm25 if metodo == "bm25" else retriever.search
+    cortes = (
+        (f"v1 ({len(v1)})", v1),
+        (f"completo ({len(entries)})", entries),
+    )
+    for etiqueta, subset in cortes:
+        positivos = _positivos(subset)
+        h3 = h5 = 0
+        for entry in positivos:
+            hits = buscar(entry["q"], TOP_K, proyecto=entry["proyecto"])
+            h3 += int(_acierto(hits, entry, k=3))
+            h5 += int(_acierto(hits, entry, k=5))
+        print(f"  {etiqueta:<18} {len(positivos):>4} {h3:>8} {h5:>8}")
+
+
 def _comparar_reranker(retriever, entries: list[dict],
                        timeout: float = 20.0) -> None:
     """Mide el gold con RRF solo, replace y fuse (pesos × top_n)."""
     print("\ntest — con y sin reranker (top 3 / top 5)")
     previo = {name: os.environ.get(name) for name in _RERANK_VARS}
     try:
+        print("  gold viejo vs nuevo")
+        print(f"  {'corte':<14} {'n':>4} {'hit@3':>8} {'hit@5':>8}")
+        _configurar_rerank(enabled=False)
+        print("  RRF solo")
+        _resumen_gold(retriever, entries, "search")
+        _configurar_rerank(enabled=True, mode="fuse", peso=0.5, top_n=10)
+        print("  fuse 0.5 · top_n=10")
+        _resumen_gold(retriever, entries, "search")
         _configurar_rerank(enabled=False)
         _tabla(retriever, entries, "RRF solo")
         # Igual que EMBED_TIMEOUT: la medición prioriza calidad, no latencia.
@@ -191,8 +218,16 @@ def main() -> None:
         if hibrida:
             _tabla(retriever, entries, "hibrida")
         _negativas(retriever, entries, etiqueta)
+    test_entries = _leer(GOLD_TEST_PATH)
+    print("\ntest — corte v1 vs completo (top 3 / top 5)")
+    print(f"  {'corte':<18} {'n':>4} {'hit@3':>8} {'hit@5':>8}")
+    print("  bm25")
+    _resumen_gold(retriever, test_entries, "bm25")
+    if hibrida:
+        print("  hibrida")
+        _resumen_gold(retriever, test_entries, "search")
     if comparar:
-        _comparar_reranker(retriever, _leer(GOLD_TEST_PATH))
+        _comparar_reranker(retriever, test_entries)
     print()
     _casos(retriever)
 

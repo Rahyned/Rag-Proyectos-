@@ -16,7 +16,7 @@ El inicio de Laboratorio RioDent presenta al laboratorio y lleva al pedido. Hay 
 
 ### Catálogo de servicios y materiales de Laboratorio RioDent
 
-El catálogo de Laboratorio RioDent, en la ruta de catálogos, describe qué fabrica el laboratorio para que el odontólogo elija el tipo de trabajo antes de pedir. Hay cuatro bloques: centro de fresado CAD/CAM (coronas y puentes de circonia, disilicato de litio, incrustaciones, carillas y PMMA), implantología (prótesis híbridas, titanio, PEEK, CoCr Sintron y sistemas multi-implantarios), planificación digital (encerado en Exocad y toma de color) y prótesis removible (cromo cobalto, flexibles, acrílicas y placas miorrelajantes). Cada tarjeta cierra con un enlace para solicitar una orden. Más abajo, un carrusel explica siete materiales: zirconio, disilicato de litio, PMMA, EZAM, PEEK, Ceramage y Sintron, con usos y contraindicaciones. Las rutas antiguas de trabajos o de catálogo en singular redirigen a este catálogo.
+El catálogo de servicios de Laboratorio RioDent, en la ruta de catálogos, describe qué servicios ofrece el laboratorio y qué fabrica para que el odontólogo elija el tipo de trabajo antes de pedir. Hay cuatro bloques: centro de fresado CAD/CAM (coronas y puentes de circonia, disilicato de litio, incrustaciones, carillas y PMMA), implantología (prótesis híbridas, titanio, PEEK, CoCr Sintron y sistemas multi-implantarios), planificación digital (encerado en Exocad y toma de color) y prótesis removible (cromo cobalto, flexibles, acrílicas y placas miorrelajantes). Cada tarjeta cierra con un enlace para solicitar una orden. Más abajo, un carrusel explica siete materiales: zirconio, disilicato de litio, PMMA, EZAM, PEEK, Ceramage y Sintron, con usos y contraindicaciones. Las rutas antiguas de trabajos o de catálogo en singular redirigen a este catálogo.
 
 ### Orden de trabajo digital de Laboratorio RioDent
 
@@ -149,7 +149,7 @@ No. Laboratorio RioDent no emite facturas, no calcula precios y no lleva cuenta 
 
 ### ¿Cómo hago un pedido?
 
-En Laboratorio RioDent se entra a Orden, se completan paciente, odontólogo y producto, se marcan las piezas y se envía. Se pueden agregar varias órdenes en el mismo envío. El laboratorio recibe un correo.
+Para encargar un trabajo al laboratorio, en Laboratorio RioDent se entra a Orden, se completan paciente, odontólogo y producto, se marcan las piezas y se envía. Se pueden agregar varias órdenes en el mismo envío. El laboratorio recibe un correo.
 
 ### ¿Qué onda con los precios?
 
@@ -189,7 +189,7 @@ Laboratorio RioDent avisa que no pudo enviar, deja los datos en el formulario y 
 
 ### ¿Cómo pido la toma de color?
 
-En Laboratorio RioDent se abre Toma de color, se completan paciente y odontólogo, y se envía. El turno presencial publicado es lunes y miércoles de 14 a 16:30. El texto de la página pide no ir con lápiz labial y dejar pasar dos semanas después de un blanqueamiento.
+La toma de color, o colorimetría, se pide en Laboratorio RioDent abriendo Toma de color, completando paciente y odontólogo, y enviando la solicitud. El turno presencial publicado es lunes y miércoles de 14 a 16:30. El texto de la página pide no ir con lápiz labial y dejar pasar dos semanas después de un blanqueamiento.
 
 ### ¿Hacen envíos o retiros?
 
@@ -237,7 +237,7 @@ El teléfono público de Laboratorio RioDent es 341 350-1085. El correo es riode
 
 ### ¿Dónde queda el laboratorio?
 
-Laboratorio RioDent publica la sede en Alsina 641, Rosario, Santa Fe, con mapa en Contacto. El teléfono es 341 350-1085, el correo es riodentlab@gmail.com y el WhatsApp es +54 9 341 350-1085.
+La dirección de la sede de Laboratorio RioDent es Alsina 641, Rosario, Santa Fe, con mapa en Contacto. El teléfono es 341 350-1085, el correo es riodentlab@gmail.com y el WhatsApp es +54 9 341 350-1085.
 
 ### ¿Por qué me dice que espere un minuto?
 
