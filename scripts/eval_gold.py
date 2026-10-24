@@ -4,9 +4,13 @@ Si `EMBEDDINGS_PROVIDER` está definida, se respeta (por ejemplo `off` para
 medir solo BM25). Si no, con `JINA_API_KEY` usa Jina y sin key apaga el
 denso: el modelo local (ONNX) no se carga.
 
-`--rerank` agrega la comparación del gold de test con y sin reranker, cada
-una con su top 3 y top 5. Necesita `CF_ACCOUNT_ID` y `CF_API_TOKEN`; sin
-credenciales la comparación se omite (no se inventan números).
+`--rerank` agrega la comparación del gold de test: RRF solo, reranker en
+modo `replace` y `fuse` con pesos 0.3/0.5/0.7, cada uno con `RERANK_TOP_N`
+10 y 20, siempre con top 3 y top 5. Los resultados del reranker se cachean
+por (consulta, pool), así la matriz completa gasta una llamada por consulta
+y por `RERANK_TOP_N` (44 × 2 = 88), no una por tabla. Necesita
+`CF_ACCOUNT_ID` y `CF_API_TOKEN`; sin credenciales la comparación se omite
+(no se inventan números).
 """
 
 from __future__ import annotations
@@ -113,21 +117,47 @@ def _casos(retriever) -> None:
             print(f"      {i}. {hit.get('proyecto')} / {lugar}")
 
 
+_TOP_NS = (20, 10)
+_PESOS_FUSE = (0.3, 0.5, 0.7)
+_RERANK_VARS = (
+    "RERANK_ENABLED", "RERANK_MODE", "RERANK_WEIGHT", "RERANK_TOP_N",
+)
+
+
+def _configurar_rerank(*, enabled: bool, mode: str = "fuse",
+                       peso: float = 0.5, top_n: int = 20) -> None:
+    os.environ["RERANK_ENABLED"] = "1" if enabled else "0"
+    os.environ["RERANK_MODE"] = mode
+    os.environ["RERANK_WEIGHT"] = str(peso)
+    os.environ["RERANK_TOP_N"] = str(top_n)
+
+
 def _comparar_reranker(retriever, entries: list[dict],
                        timeout: float = 20.0) -> None:
-    """Mide el mismo gold con el orden del RRF y con el reranker."""
+    """Mide el gold con RRF solo, replace y fuse (pesos × top_n)."""
     print("\ntest — con y sin reranker (top 3 / top 5)")
-    os.environ["RERANK_ENABLED"] = "0"
+    previo = {name: os.environ.get(name) for name in _RERANK_VARS}
     try:
-        _tabla(retriever, entries, "hibrida (RRF)")
-        os.environ["RERANK_ENABLED"] = "1"
+        _configurar_rerank(enabled=False)
+        _tabla(retriever, entries, "RRF solo")
         # Igual que EMBED_TIMEOUT: la medición prioriza calidad, no latencia.
         reranker = getattr(retriever, "_reranker", None)
         if reranker is not None:
             reranker.timeout = timeout
-        _tabla(retriever, entries, "hibrida + reranker")
+        for top_n in _TOP_NS:
+            _configurar_rerank(enabled=True, mode="replace", top_n=top_n)
+            _tabla(retriever, entries, f"reranker replace · top_n={top_n}")
+            for peso in _PESOS_FUSE:
+                _configurar_rerank(
+                    enabled=True, mode="fuse", peso=peso, top_n=top_n,
+                )
+                _tabla(retriever, entries, f"fuse {peso} · top_n={top_n}")
     finally:
-        os.environ.pop("RERANK_ENABLED", None)
+        for name, valor in previo.items():
+            if valor is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = valor
 
 
 def main() -> None:
@@ -140,6 +170,9 @@ def main() -> None:
         # si vence, el circuito se abre y el resto de la tabla cae a BM25.
         embeddings.EMBED_TIMEOUT = 20.0
     print("denso:", "hibrida (API)" if hibrida else "apagado, solo BM25")
+    # Las tablas de siempre son el baseline RRF: el reranker solo se paga
+    # con --rerank, y ahí el cache reutiliza las llamadas entre configuraciones.
+    os.environ["RERANK_ENABLED"] = "0"
     if comparar and not hibrida:
         print("reranker: el denso está apagado; no hay híbrida que reordenar")
         comparar = False

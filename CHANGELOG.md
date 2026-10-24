@@ -7,12 +7,20 @@
 - Reranker de Cloudflare Workers AI (`@cf/baai/bge-reranker-base`) después
   del RRF: el híbrido pide `RERANK_TOP_N` (20) candidatos, los reordena y
   deja `RERANK_KEEP` (5) para el LLM.
-- `RERANK_ENABLED` (default apagado), `RERANK_TOP_N` y `RERANK_KEEP` en
-  `.env.example`.
-- `scripts/eval_gold.py --rerank`: mide el gold de test con y sin reranker,
-  con top 3 y top 5 de cada uno.
-- Tests del reranker con httpx falso: reordenamiento, empate estable, cupo,
-  timeout, errores HTTP y caída al RRF ante error, timeout y presupuesto.
+- Modo `fuse` (default): recombina el orden del reranker con el del RRF con
+  el mismo cálculo de RRF (k=60) y peso `RERANK_WEIGHT` (0 = solo RRF,
+  1 = solo reranker). `RERANK_MODE=replace` conserva el comportamiento
+  anterior.
+- Cache del reranker por (consulta, pool): reutiliza la llamada entre modos
+  y pesos, y no descuenta el cupo dos veces.
+- `RERANK_ENABLED`, `RERANK_MODE`, `RERANK_WEIGHT`, `RERANK_TOP_N` y
+  `RERANK_KEEP` en `.env.example`.
+- `scripts/eval_gold.py --rerank`: mide RRF solo, `replace` y `fuse` con
+  pesos 0.3/0.5/0.7, cada uno con `RERANK_TOP_N` 10 y 20, con top 3, top 5
+  y fila TOTAL por tabla.
+- Tests del reranker con httpx falso: reordenamiento, fusión y pesos
+  extremos, cache, empate estable, cupo, timeout, errores HTTP y caída al
+  RRF ante error, timeout y presupuesto.
 
 ### Changed
 
@@ -21,6 +29,8 @@
 - Con el reranker activo el `top_k` se recorta a `RERANK_KEEP`.
 - `HybridRetriever` acepta un `reranker` inyectable (mismo patrón que
   `embedder`).
+- `--rerank` deja `RERANK_ENABLED=0` en las tablas de siempre (baseline
+  RRF) y gasta como máximo 88 llamadas de rerank (44 consultas × 2 top_n).
 
 ### Fixed
 
@@ -40,7 +50,7 @@
 
 ### Tests
 
-`171 passed, 1 skipped`.
+`179 passed, 1 skipped`.
 
 ## 2026-10-23 — main
 

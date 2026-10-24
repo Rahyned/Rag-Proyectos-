@@ -123,6 +123,24 @@ def rerank_keep() -> int:
     return _int_env("RERANK_KEEP", 5)
 
 
+def rerank_mode() -> str:
+    """`fuse` (default) recombina con el RRF; `replace` usa solo el reranker."""
+    raw = os.getenv("RERANK_MODE", "").strip().lower()
+    return "replace" if raw == "replace" else "fuse"
+
+
+def rerank_weight() -> float:
+    """Peso del reranker en `fuse`. 0 = solo RRF, 1 = solo reranker. Default 0.5."""
+    raw = os.getenv("RERANK_WEIGHT", "").strip()
+    if not raw:
+        return 0.5
+    try:
+        valor = float(raw)
+    except ValueError:
+        return 0.5
+    return valor if 0.0 <= valor <= 1.0 else 0.5
+
+
 # Modelo servido por la API de Jina. Mismo espacio que el ONNX local si el
 # coseno de los mismos textos da ≥ 0.99; si no, el índice se rehace con la API.
 JINA_EMBED_MODEL = "jina-embeddings-v2-base-es"
@@ -148,3 +166,6 @@ CF_RERANK_URL = (
 # Presupuesto de la consulta completa: si el reranker tarda más, se responde
 # con el orden del RRF (la latencia no se negocia con el usuario esperando).
 RERANK_TIMEOUT = 2.0
+# El cache evita repetir la misma llamada (y el cupo) cuando se comparan
+# modos o pesos sobre el mismo pool, como hace la evaluación.
+RERANK_CACHE_SIZE = 500

@@ -6,17 +6,24 @@ embeddings de Cloudflare: es la misma API y no puede gastar de más. Si falta
 la key, el cupo está agotado, el circuito está abierto, la API falla o tarda
 más de `RERANK_TIMEOUT`, `RerankError` lleva solo el motivo y el retriever
 sigue con el orden del RRF.
+
+En modo `fuse` el orden del reranker se recombina con el del RRF
+(`fusionar_rrf`): el orden léxico y el semántico se compensan en vez de que
+uno reemplace al otro. El cache por (consulta, pool) evita pagar dos veces
+la misma llamada cuando se comparan modos o pesos sobre los candidatos.
 """
 
 import logging
 import threading
 import time
+from collections import OrderedDict
 
 import httpx
 
 from app import config as app_config
 from app import ratelimit
-from rag.config import CF_RERANK_MODEL, CF_RERANK_URL, RERANK_TIMEOUT
+from rag.config import (CF_RERANK_MODEL, CF_RERANK_URL, RERANK_CACHE_SIZE,
+                        RERANK_TIMEOUT, RRF_K)
 from rag.embeddings import _detalle_error_cloudflare
 
 log = logging.getLogger("rag.rerank")
@@ -85,15 +92,54 @@ def _reordenar(hits: list[dict], puntajes: list[float]) -> list[dict]:
     return salida
 
 
+def fusionar_rrf(hits: list[dict], reordenados: list[dict],
+                 k: int = RRF_K, peso: float = 0.5) -> list[dict]:
+    """Recombina el orden del RRF con el del reranker (RRF ponderado).
+
+    Mismo cálculo que `hybrid.rrf` con k=60, pero con dos pesos que suman 1:
+    `peso` es el del reranker, así 0 deja intacto el orden híbrido y 1 el del
+    reranker. Ante empate manda el orden del RRF.
+    """
+    if not hits:
+        return []
+    rank_re = {
+        hit["chunk_id"]: i + 1 for i, hit in enumerate(reordenados)
+    }
+    score_re = {
+        hit["chunk_id"]: hit.get("rerank_score") for hit in reordenados
+    }
+    n = len(hits)
+    puntajes = [
+        (1.0 - peso) / (k + i)
+        + peso / (k + rank_re.get(hit["chunk_id"], n))
+        for i, hit in enumerate(hits, start=1)
+    ]
+    orden = sorted(range(n), key=lambda i: (-puntajes[i], i))
+    salida = []
+    for rank, i in enumerate(orden, start=1):
+        item = dict(hits[i])
+        item["rank"] = rank
+        item["fusion_score"] = puntajes[i]
+        score = score_re.get(item["chunk_id"])
+        if score is not None:
+            item["rerank_score"] = score
+        item["engine"] = "hibrida+fuse"
+        salida.append(item)
+    return salida
+
+
 class CloudflareReranker:
     """Un solo cliente con keep-alive, igual que `CloudflareEmbeddings`."""
 
     MODEL = CF_RERANK_MODEL
 
     def __init__(self, client: httpx.Client | None = None,
-                 timeout: float = RERANK_TIMEOUT) -> None:
+                 timeout: float = RERANK_TIMEOUT,
+                 cache_size: int = RERANK_CACHE_SIZE) -> None:
         self._client = client
         self.timeout = timeout
+        self._cache_size = cache_size
+        self._cache: OrderedDict[tuple, list[float]] = OrderedDict()
         self._lock = threading.Lock()
 
     def _http(self) -> httpx.Client:
@@ -109,6 +155,12 @@ class CloudflareReranker:
         """Devuelve los hits reordenados por relevancia. Puede lanzar `RerankError`."""
         if len(hits) < 2:
             return [dict(hit) for hit in hits]
+        clave = (query, tuple(hit.get("chunk_id") for hit in hits))
+        with self._lock:
+            guardado = self._cache.get(clave)
+            if guardado is not None:
+                self._cache.move_to_end(clave)
+                return _reordenar(hits, list(guardado))
         account = app_config.cf_account_id()
         token = app_config.cf_api_token()
         if not account or not token:
@@ -167,4 +219,9 @@ class CloudflareReranker:
         if _ahora() - inicio > self.timeout:
             _loguear_fallo("timeout", inicio)
             raise RerankError("timeout")
+        with self._lock:
+            self._cache[clave] = puntajes
+            self._cache.move_to_end(clave)
+            while len(self._cache) > self._cache_size:
+                self._cache.popitem(last=False)
         return _reordenar(hits, puntajes)

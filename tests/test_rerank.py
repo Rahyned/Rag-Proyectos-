@@ -118,6 +118,7 @@ def _respuesta(scores: list[float]) -> httpx.Response:
 
 def test_reranker_mockeado_reordena_el_pool(tmp_path, monkeypatch):
     monkeypatch.setenv("RERANK_ENABLED", "1")
+    monkeypatch.setenv("RERANK_MODE", "replace")
     monkeypatch.setenv("RERANK_TOP_N", "3")
     monkeypatch.setenv("RERANK_KEEP", "2")
     fake = RerankerFalso()
@@ -131,6 +132,101 @@ def test_reranker_mockeado_reordena_el_pool(tmp_path, monkeypatch):
     assert [hit["rank"] for hit in hits] == [1, 2]
     assert hits[0]["engine"] == "hibrida+rerank"
     assert hits[0]["chunk_id"] == fake.llamadas[0][-1]
+
+
+def test_fuse_es_el_modo_por_defecto(tmp_path, monkeypatch):
+    monkeypatch.setenv("RERANK_ENABLED", "1")
+    fake = RerankerFalso()
+    hits = _retriever(tmp_path, reranker=fake).search(
+        QUERY, 3, proyecto="stella",
+    )
+    assert fake.llamadas
+    assert all(hit["engine"] == "hibrida+fuse" for hit in hits)
+
+
+def test_fuse_peso_cero_es_el_orden_rrf(tmp_path, monkeypatch):
+    monkeypatch.setenv("RERANK_ENABLED", "1")
+    esperado = _baseline(tmp_path, monkeypatch)
+    monkeypatch.setenv("RERANK_MODE", "fuse")
+    monkeypatch.setenv("RERANK_WEIGHT", "0")
+    fake = RerankerFalso()
+
+    hits = _retriever(tmp_path, reranker=fake).search(
+        QUERY, 3, proyecto="stella",
+    )
+
+    # El reranker se consultó, pero el peso 0 no le deja mover nada.
+    assert fake.llamadas
+    assert [hit["chunk_id"] for hit in hits] == [
+        hit["chunk_id"] for hit in esperado
+    ]
+
+
+def test_fuse_peso_uno_es_el_orden_del_reranker(tmp_path, monkeypatch):
+    monkeypatch.setenv("RERANK_ENABLED", "1")
+    monkeypatch.setenv("RERANK_MODE", "fuse")
+    monkeypatch.setenv("RERANK_WEIGHT", "1")
+    fake = RerankerFalso()
+
+    hits = _retriever(tmp_path, reranker=fake).search(
+        QUERY, 3, proyecto="stella",
+    )
+
+    assert [hit["chunk_id"] for hit in hits] == list(
+        reversed(fake.llamadas[0])
+    )
+
+
+def test_fuse_peso_medio_mezcla_los_dos_ordenes(tmp_path, monkeypatch):
+    monkeypatch.setenv("RERANK_ENABLED", "1")
+    esperado = _baseline(tmp_path, monkeypatch)
+    monkeypatch.setenv("RERANK_MODE", "fuse")
+    monkeypatch.setenv("RERANK_WEIGHT", "0.5")
+
+    hits = _retriever(tmp_path, reranker=RerankerFalso()).search(
+        QUERY, 3, proyecto="stella",
+    )
+
+    # RRF = [A, B, C]; reranker = [C, B, A]. A 0.5, A y C empatan y B
+    # (segundo en ambos) cae al final: gana el orden del RRF en el empate.
+    assert [hit["chunk_id"] for hit in hits] == [
+        esperado[0]["chunk_id"],
+        esperado[2]["chunk_id"],
+        esperado[1]["chunk_id"],
+    ]
+
+
+def test_fuse_respeta_keep(tmp_path, monkeypatch):
+    monkeypatch.setenv("RERANK_ENABLED", "1")
+    monkeypatch.setenv("RERANK_MODE", "fuse")
+    monkeypatch.setenv("RERANK_KEEP", "2")
+
+    hits = _retriever(tmp_path, reranker=RerankerFalso()).search(
+        QUERY, 3, proyecto="stella",
+    )
+
+    assert len(hits) == 2
+
+
+def test_modo_y_peso_del_entorno(monkeypatch):
+    from rag import config as rag_config
+
+    monkeypatch.delenv("RERANK_MODE", raising=False)
+    monkeypatch.delenv("RERANK_WEIGHT", raising=False)
+    assert rag_config.rerank_mode() == "fuse"
+    assert rag_config.rerank_weight() == 0.5
+
+    monkeypatch.setenv("RERANK_MODE", "replace")
+    assert rag_config.rerank_mode() == "replace"
+    monkeypatch.setenv("RERANK_MODE", "cualquier-cosa")
+    assert rag_config.rerank_mode() == "fuse"
+
+    for valor in ("0", "0.3", "1"):
+        monkeypatch.setenv("RERANK_WEIGHT", valor)
+        assert rag_config.rerank_weight() == float(valor)
+    for valor in ("-0.1", "1.1", "no-es-numero"):
+        monkeypatch.setenv("RERANK_WEIGHT", valor)
+        assert rag_config.rerank_weight() == 0.5
 
 
 @pytest.mark.parametrize(
@@ -230,6 +326,48 @@ def test_la_llamada_consume_el_cupo_de_cloudflare(monkeypatch):
     hits = [{"chunk_id": chunk_id, "text": texto} for chunk_id, texto in FILAS]
     reranker.reordenar(QUERY, hits)
     assert not ratelimit.puede_llamar_cloudflare()
+
+
+def test_el_cache_evita_repetir_la_llamada(monkeypatch):
+    _configurar_cloudflare(monkeypatch, budget="2")
+    llamadas = []
+
+    def handler(_request):
+        llamadas.append(1)
+        return _respuesta([0.1, 0.9, 0.5])
+
+    hits = [{"chunk_id": chunk_id, "text": texto} for chunk_id, texto in FILAS]
+    reranker = CloudflareReranker(client=_cliente(handler))
+    primera = reranker.reordenar(QUERY, hits)
+    segunda = reranker.reordenar(QUERY, hits)
+
+    assert len(llamadas) == 1
+    assert [hit["chunk_id"] for hit in primera] == [
+        hit["chunk_id"] for hit in segunda
+    ]
+    # Queda 1 de los 2 del cupo: la segunda salió del cache.
+    assert ratelimit.puede_llamar_cloudflare()
+
+
+def test_el_cache_responde_aunque_el_cupo_este_agotado(monkeypatch):
+    _configurar_cloudflare(monkeypatch, budget="1")
+    llamadas = []
+
+    def handler(_request):
+        llamadas.append(1)
+        return _respuesta([0.1, 0.9, 0.5])
+
+    hits = [{"chunk_id": chunk_id, "text": texto} for chunk_id, texto in FILAS]
+    reranker = CloudflareReranker(client=_cliente(handler))
+    primera = reranker.reordenar(QUERY, hits)
+    assert not ratelimit.puede_llamar_cloudflare()
+
+    segunda = reranker.reordenar(QUERY, hits)
+
+    assert len(llamadas) == 1
+    assert [hit["chunk_id"] for hit in primera] == [
+        hit["chunk_id"] for hit in segunda
+    ]
 
 
 def test_presupuesto_agotado_no_llama(monkeypatch):

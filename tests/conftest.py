@@ -15,6 +15,8 @@ def _reset_ratelimit(monkeypatch):
     monkeypatch.delenv("RERANK_ENABLED", raising=False)
     monkeypatch.delenv("RERANK_TOP_N", raising=False)
     monkeypatch.delenv("RERANK_KEEP", raising=False)
+    monkeypatch.delenv("RERANK_MODE", raising=False)
+    monkeypatch.delenv("RERANK_WEIGHT", raising=False)
     ratelimit.reset()
     yield
     ratelimit.reset()

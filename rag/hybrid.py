@@ -15,10 +15,11 @@ import numpy as np
 
 from .config import (BM25_B, BM25_BIGRAM_BONUS, BM25_K1, CHUNKS_PATH,
                      EMBED_MODEL, INDEX_PATH, RRF_K, TOP_K, dense_enabled,
-                     rerank_enabled, rerank_keep, rerank_top_n)
+                     rerank_enabled, rerank_keep, rerank_mode, rerank_top_n,
+                     rerank_weight)
 from .embeddings import EmbedError, crear_embedder
 from .manifiesto import ManifiestoError, cargar, detectar_proyecto
-from .rerank import CloudflareReranker, RerankError
+from .rerank import CloudflareReranker, RerankError, fusionar_rrf
 from .sinonimos import expandir
 
 log = logging.getLogger("rag.hybrid")
@@ -340,6 +341,10 @@ class HybridRetriever:
             return hits[:top_k]
         try:
             reordenados = self._reranker.reordenar(query, hits)
+            if rerank_mode() == "fuse":
+                reordenados = fusionar_rrf(
+                    hits, reordenados, peso=rerank_weight()
+                )
         except RerankError as exc:
             log.warning("rerank no disponible (%s); usando orden RRF", exc.motivo)
             return hits[:top_k]
