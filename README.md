@@ -1,308 +1,49 @@
-# Rag-Proyectos
+# Asistente RAG de proyectos
 
-Asistente RAG sobre la documentación de los proyectos del portafolio
-(STELLA y los que se sumen). Cada cita indica proyecto, documento y sección;
-si el documento es público y hay PDF, el enlace abre la página.
+**Asistente que responde preguntas sobre la documentación de mis proyectos y cita proyecto, documento, sección y página.**
 
-**En producción** (fases 0–7 completadas):
+🔗 **Demo:** https://rag-proyectos.vercel.app · también desde el portfolio en `/asistente/`
 
-- Directo: <https://rag-proyectos.vercel.app>
-- Desde el portafolio (mismo dominio):
-  <https://portafolio-web-three-gamma.vercel.app/asistente/>
+![Demo: pregunta con citas de página](docs/demo.gif)
 
-![Demo: pregunta sobre una orden de compra con citas de página](docs/demo.gif)
+## El problema
+
+Los usuarios de SolutionsCars y STELLA hacían preguntas que ya estaban respondidas en la documentación. El asistente encuentra la respuesta y muestra de dónde sale.
 
 ## Cómo funciona
 
-```
-Pregunta → (filtro de proyecto) → FAISS + BM25 → RRF → top-k
-         → gate anti-relleno (score BM25 < 2 sobre el subconjunto → sin respuesta;
-           si nombra un documento y hay un término conocido, pasa y prioriza
-           la introducción; «¿Qué es X?» también la prioriza)
-         → modo fragmentos (citas, 0 tokens)  ─┐
-         → modo sintética (respuesta Groq, top_k efectivo ≤ 5) ─┴→ UI
-```
-
-- **Retrieval**: BM25 corre siempre. El canal denso usa el índice FAISS
-  actual: `@cf/baai/bge-m3` (1024d) en producción y
-  `jina-embeddings-v2-base-es` (768d) en desarrollo/ingesta local. En Vercel,
-  `EMBEDDINGS_PROVIDER=cloudflare` pide los vectores a Workers AI
-  (`CF_ACCOUNT_ID` + `CF_API_TOKEN`, timeout 2 s, cliente HTTP reutilizado y
-  lotes de 20 en la ingesta). Si falta una credencial, se agota
-  `CF_DAILY_BUDGET`, hay un error o se vence el timeout, la consulta sigue en
-  BM25. Un timeout, un 5xx o un 429 pausan Cloudflare 90 s (en memoria y en
-  Upstash, si está) con claves propias (`cloudflare:circuit`) y el cupo solo
-  baja cuando la llamada responde bien. Jina sigue disponible como
-  alternativa (`EMBEDDINGS_PROVIDER=api`).
-- **Generación opcional**: si hay `LLM_API_KEY` (Groq, API compatible con
-  OpenAI, con reintentos ante 5xx) redacta la respuesta con las citas; si no —
-  o si falla — responde con los fragmentos crudos y sus páginas. El asistente
-  **nunca queda roto**.
-- **Citas**: `Proyecto · Documento · Sección (pág. N)`. El enlace al PDF
-  solo aparece si el documento es público y tiene página.
+- **Búsqueda híbrida:** BM25 (palabras clave) + FAISS (semántica con `bge-m3`, 1024 dimensiones, vía Cloudflare Workers AI), combinadas con Reciprocal Rank Fusion.
+- **Citas verificables:** cada respuesta indica `Proyecto · Documento · Sección (pág. N)` y, si el PDF es público, el link abre esa página.
+- **Sin relleno:** si la pregunta no tiene que ver con la documentación, responde que no encontró nada en vez de inventar.
+- **Dos modos:** fragmentos citados o respuesta redactada por un LLM (Groq) en streaming (SSE).
+- **Nunca queda roto:** sin LLM responde con fragmentos; si falla la búsqueda semántica sigue con BM25.
+- **Protección:** rate limit por IP, cupos diarios, errores saneados y headers de seguridad (CSP).
 
 ## Stack
 
-| Capa | Tecnología |
-|------|------------|
-| API | FastAPI + SSE (`/api/chat`), Swagger en `/docs` |
-| Retrieval | Híbrido: FAISS + BM25 + RRF (portado de `instructor-LSA`) |
-| Embeddings | `@cf/baai/bge-m3` (1024d) en Workers AI; Jina 768d o fastembed local como alternativas |
-| Generación | Opcional: Groq (compatible OpenAI) por env vars `LLM_*` |
-| UI | React 19 + Vite 8 + oxlint (ES, sin TypeScript) |
-| Tests | pytest (151 passed, 1 skipped; gold_test de 44 preguntas ES) |
-| CI | GitHub Actions: pytest con `uv sync --frozen` + oxlint + build del cliente |
-| Deploy | Vercel: services `web` + `api` en un proyecto + proxy del portafolio |
+FastAPI + SSE · FAISS · BM25 · Cloudflare Workers AI · Groq · Upstash Redis · React 19 + Vite · pytest · GitHub Actions · Vercel.
 
-## Estructura
+## Calidad
 
-```
-corpus/     corpus/<proyecto>/*.(md|pdf) y manifiesto.json
-data/       índice FAISS, chunks, hash del corpus (commiteado)
-scripts/    md2pdf + ingest (markdown por encabezados, PDF por página)
-rag/        manifiesto, chunker, embeddings, BM25, RRF, guardrail
-app/        FastAPI: /api/health, /api/proyectos, /api/chat, /api/search
-api/        wrapper ASGI de Vercel (normaliza /asistente/api/*)
-tests/      pytest: API + retrieval (gold_test) + secretos + embeddings
-client/     React: selector de proyecto, markdown seguro, citas
-docs/       GIF del README
-.github/    CI y chequeo de corpus en PRs
-```
+- 151 tests con pytest y un set de evaluación de 44 preguntas en español.
+- En ese set, la búsqueda híbrida acierta 38/44 en el top 3 y 43/44 en el top 5 (BM25 solo: 36/44 y 38/44).
+- El CI corre tests, lint y build. La ingesta bloquea documentos con claves, tokens, CUIT/CUIL o emails no autorizados.
 
-## Desarrollo
+## Cómo correrlo
 
 ```bash
-# API (Python 3.12+)
-uv sync --frozen                # crea .venv desde uv.lock (o: pip install -r requirements.txt)
-uv run uvicorn app.main:app --reload     # http://localhost:8000
-
-# UI
-cd client
-npm install
-npm run dev        # http://localhost:5173 (proxy /api -> :8000)
-
-# Tests (0 tokens)
+uv sync --frozen
+uv run uvicorn app.main:app --reload   # API en :8000
+cd client && npm install && npm run dev  # UI en :5173
 uv run pytest
 ```
 
-## Sumar un proyecto
+Las variables de entorno están documentadas en `.env.example`. Para sumar un proyecto, se agregan sus documentos a `corpus/<proyecto>/`, se registra en `corpus/manifiesto.json` y se reindexa con `scripts/ingest.py`.
 
-El corpus es **repo-first**: los archivos viven en `corpus/<proyecto>/` y el
-índice viaja commiteado (el FS de Vercel es read-only, no hay upload en runtime).
+## Estado
 
-1. Creá `corpus/<id>/` y dejá ahí los `.md` o `.pdf`. Los que empiezan con `_`
-   se ignoran. Un `.md` puede tener al lado un `.pdf` con el mismo nombre: el
-   markdown se indexa y el PDF solo sirve para el enlace de página.
-2. Sumá el proyecto a `corpus/manifiesto.json`: `id`, `nombre`, `descripcion`,
-   `url` opcional, `aliases`, `preguntas`, y por documento `archivo`, `titulo`,
-   `tipo` (`manual`, `ficha`, `changelog` o `readme`) y `publico`.
-   Los emails que el documento puede mencionar van en `emails_publicos`.
-   La ingesta falla si falta un campo, si el archivo no está, o si el texto
-   tiene claves, tokens, `BEGIN PRIVATE KEY`, CUIT/CUIL, un email fuera de la
-   allowlist, o si el nombre del archivo dice «auditoría» o «vulnerabilidad».
-3. Si ya hay texto para evaluar, agregá casos con `proyecto` en
-   `data/gold_tuning.json` (para ajustar) y dejá `data/gold_test.json` para
-   medir. No uses el de tuning como resultado.
-4. Ingestá: `uv run python scripts/ingest.py`
-   (regenera `data/chunks.jsonl`, `data/index.faiss`, `data/corpus.sha256` y
-   `data/ingest_meta.json`). **No** comitees con `--sin-embed`.
-5. Validá: `uv run pytest` y, con el modelo local,
-   `RUN_DENSE_TESTS=1 uv run pytest tests/test_gold.py`.
-6. Commiteá juntos la carpeta, el manifiesto, los chunks, el índice, el hash
-   y la meta.
+En producción (fases 0–11 completadas). Próximas mejoras: reranker, ajuste del peso semántico y más preguntas de evaluación.
 
-`uv run python scripts/ingest.py --check` no reindexa: valida el manifiesto,
-el guardrail y que el hash del corpus coincida con el de la última ingesta.
-En un PR que toque `corpus/` lo corre `.github/workflows/corpus.yml`.
+## Autor
 
-## Índice local, Cloudflare y Jina
-
-El índice viaja commiteado y la consulta tiene que usar el mismo espacio
-vectorial. `data/ingest_meta.json` guarda `embed_model`, `dims` y `origen`;
-el retriever compara la dimensión del vector de consulta contra `index.d` y,
-si no coincide, cae a BM25.
-
-Producción usa Cloudflare Workers AI (`@cf/baai/bge-m3`, 1024d). Para
-reindexar, las credenciales van solo en el entorno de esa sesión:
-
-```powershell
-$cfAccount = Read-Host "CF_ACCOUNT_ID"
-$secure = Read-Host "CF_API_TOKEN" -AsSecureString
-$bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-
-try {
-    $env:CF_ACCOUNT_ID = $cfAccount
-    $env:CF_API_TOKEN = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-    uv run python scripts/ingest.py --provider cloudflare
-}
-finally {
-    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-    Remove-Item Env:CF_ACCOUNT_ID, Env:CF_API_TOKEN -ErrorAction SilentlyContinue
-    Remove-Variable cfAccount, secure, bstr -ErrorAction SilentlyContinue
-}
-```
-
-y commiteá juntos `data/index.faiss`, `data/ingest_meta.json` (y
-`data/chunks.jsonl` / `data/corpus.sha256` si cambiaron).
-
-Para diagnosticar sin tocar `data/`:
-
-```powershell
-uv run python scripts/ingest.py --provider cloudflare --limit 3
-```
-
-`--limit N` procesa solo los primeros N chunks y no escribe chunks, índice ni
-meta. Si Cloudflare responde un 4xx/5xx, el log incluye `errors[].code` y
-`errors[].message` (truncado a 500 caracteres, sin token ni account id).
-
-El índice local de desarrollo se genera con `uv run python scripts/ingest.py`
-(fastembed, ONNX ~640 MB). Jina sigue como alternativa: con `JINA_API_KEY`
-solo en el entorno (no en el repo):
-
-```powershell
-$env:JINA_API_KEY = "la-key"
-uv run python scripts/comparar_embeddings.py
-```
-
-El script imprime el coseno de tres frases y termina con error si el mínimo
-es menor que 0.99. En ese caso:
-
-```powershell
-uv run python scripts/ingest.py --provider api
-```
-
-y commiteá de nuevo `data/index.faiss` y `data/ingest_meta.json`.
-
-## Variables de entorno
-
-Ver `.env.example`:
-
-| Var | Rol |
-|-----|-----|
-| `LLM_API_KEY` | clave Groq; nunca commiteada; si falta → modo fragmentos |
-| `LLM_BASE_URL` | OpenAI-compatible (default: `https://api.groq.com/openai/v1`) |
-| `LLM_MODEL` | default `qwen/qwen3.8-27b` (tope free: 1000 tokens de salida/min) |
-| `LLM_TIMEOUT` | presupuesto total de reintentos en segundos (default `45`) |
-| `LLM_DAILY_BUDGET` | llamadas a Groq por día UTC (default `300`; `0` = ilimitado). Vacío en `.env` usa el default |
-| `UPSTASH_REDIS_REST_URL` | opcional. Base REST de Upstash. Si falta (o Redis falla) el rate limit y el cupo quedan en memoria |
-| `UPSTASH_REDIS_REST_TOKEN` | opcional. Token del REST. Nunca commiteado |
-| `EMBEDDINGS_PROVIDER` | `cloudflare` (Workers AI, default en Vercel), `local` (fastembed), `api` (Jina) u `off` (solo BM25). Si no está, `RAG_DENSE=0` apaga el denso; en Vercel sin ninguna de las dos el default es `cloudflare` |
-| `CF_ACCOUNT_ID` | account id de Cloudflare Workers AI. Va por entorno, no al repo |
-| `CF_API_TOKEN` | token de Workers AI. Nunca commiteado. Sin él, la consulta cae a BM25 |
-| `CF_DAILY_BUDGET` | llamadas a Cloudflare por día UTC (default `300`; `0` = ilimitado). Solo se descuenta si la API responde OK. El cache (500) no consume cupo |
-| `EMBED_TIMEOUT_S` | timeout de la consulta de embeddings en segundos (default `2.0`) |
-| `JINA_API_KEY` | alternativa: key de `https://api.jina.ai/v1/embeddings` para `jina-embeddings-v2-base-es`. Nunca commiteada. Sin key, la consulta cae a BM25 |
-| `JINA_DAILY_BUDGET` | llamadas a Jina por día UTC (default `300`; `0` = ilimitado). Solo se descuenta si la API responde OK. El cache (500) no consume cupo |
-| `RAG_DENSE` | compatibilidad: `0` apaga el denso y `1` usa el modelo local, solo si `EMBEDDINGS_PROVIDER` no está definida |
-| `FASTEMBED_CACHE_PATH` | caché de descarga del modelo local (en Vercel, `rag/config.py` la fuerza a `/tmp`) |
-
-## Deploy (Vercel)
-
-`vercel.json` usa el modo **services**: un proyecto con dos servicios.
-
-| Servicio | Raíz | Qué sirve |
-|----------|------|-----------|
-| `web` | `client/` | UI Vite con `VITE_BASE=/asistente/`; rewrite interno `/asistente/(.*)` → `/$1` |
-| `api` | `.` | FastAPI vía `api/rag_api.py` (wrapper ASGI, `maxDuration` 60) |
-
-Rewrites del proyecto, en orden: `/asistente/api/*` → `api`, `/api/*` →
-`api`, `/asistente/*` → `web`, `/*` → `web`.
-
-Detalles que importan:
-
-1. **El wrapper `api/rag_api.py` normaliza el prefijo**: las rutas
-   `/asistente/api/chat` llegan como tal y se reescriben a `/api/chat` en
-   ASGI antes de que FastAPI enrute (el `request.path` transform de services
-   no se aplicó; se resolvió en el wrapper, con tests).
-2. **uv en el build**: Vercel ejecuta `uv lock`, que exige `[project]` en
-   `pyproject.toml`; `uv.lock` está commiteado.
-3. El `prebuild` de `client/` copia los PDF de `corpus/` (incluso en
-   subcarpetas) a `client/public/corpus/`, así las citas `#page=N` abren el
-   PDF desde el CDN. El PDF viejo `/asistente/corpus/manual-stella.pdf`
-   redirige a `/asistente/corpus/stella/manual-stella.pdf`.
-4. Env vars en el dashboard **con scope Production** (las de Preview no
-   aplican al dominio de producción): `LLM_API_KEY`, `LLM_BASE_URL`,
-   `LLM_MODEL`, `EMBEDDINGS_PROVIDER=cloudflare`, `CF_ACCOUNT_ID` y
-   `CF_API_TOKEN` (opcional `CF_DAILY_BUDGET`). Si quedó `RAG_DENSE=0` de
-   antes, `EMBEDDINGS_PROVIDER` lo pisa. Jina sigue disponible como
-   alternativa (`EMBEDDINGS_PROVIDER=api` + `JINA_API_KEY`). Sin
-   credenciales el denso cae a BM25 y la consulta no se rompe.
-5. `/api/health` expone `status` (`ok`/`degraded`), `retrievable` (índice y
-   chunks presentes), `llm` (key presente), `model`, `dense`, `embeddings`,
-   `index_dim` (dimensión del índice), `dense_error` (último fallo del canal
-   denso, con rutas saneadas) y `dense_error_origen` (el origen del proveedor
-   activo: Cloudflare o Jina), para saber en caliente si el denso cayó a BM25
-   y por qué.
-6. El aviso de build *"`api/` directory will not be built because services
-   are configured"* es **esperado** con el modo services: `api/` entra por el
-   rewrite, no como build standalone.
-7. Nunca roto: sin key → fragmentos; sin modelo → BM25; query ajena al
-   manual → "no encontré nada" (gate de score); sin índice → 503 claro en la
-   API (los tests lo cubren).
-8. **Proxy del portafolio** (repo `Portafolio-web`): su `client/vercel.json`
-   manda `/asistente/*` a `https://rag-proyectos.vercel.app/*`, y la ficha
-   STELLA tiene el botón **🤖 ASISTENTE RAG** que entra por ahí.
-9. **Headers de seguridad** (ambos `vercel.json`): en el RAG, CSP estricta
-   (`script-src 'self'`, sin hosts externos) + `nosniff`, `SAMEORIGIN`,
-   `Referrer-Policy` y `Permissions-Policy`; el portafolio lleva las mismas
-   sin CSP (usa Google Fonts).
-10. **Límites y errores**: ver la sección de abajo. Circuito ante 429s de
-    Groq (3 en 60s → degrada sin llamar al proveedor), 429 del LLM se
-    reintenta solo si `Retry-After` cabe en el presupuesto, y todo error
-    viaja al cliente como `reason` de la enumeración (`no_key | rate_limited |
-    timeout | interrupted | upstream | error`) — nunca `str(exc)` (los 503
-    llevan solo un `error_id` de 8 caracteres en el log).
-
-### Límites
-
-El limiter de la app es por IP y por endpoint (`chat` 10/min, `search`
-60/min → 429 con `Retry-After`). Si existen `UPSTASH_REDIS_REST_URL` y
-`UPSTASH_REDIS_REST_TOKEN`, la ventana es fija de 60 s en Upstash Redis REST
-(`INCR` + `EXPIRE`, clave `rl:{endpoint}:{ip}:{ventana}`). Si las vars no
-están o Redis falla, se usa el contador en memoria de esa instancia y la
-consulta sigue: nunca se rompe por Redis.
-
-En Vercel Hobby hay varias instancias y el plan deja **una** regla de
-firewall. Además del limiter de la app, este paso es **manual** en el
-dashboard:
-
-1. Proyecto → **Firewall** → **Rate Limiting** → Add Rule.
-2. Una sola regla (Hobby: máximo 1), ventana **fija**, clave **IP**.
-3. Aplicarla a `/api/chat` y `/asistente/api/chat`.
-4. Ejemplo: **10 requests / 60 s** → acción **429**.
-
-`LLM_DAILY_BUDGET` (default 300, `0` = ilimitado) corta las llamadas a Groq
-por día UTC. El contador es `llm:budget:YYYY-MM-DD` en Redis (TTL 2 días) o
-en memoria si no hay Redis. Al pasarse, `/api/chat` en modo sintética emite
-`fallback` con `reason=rate_limited` y no llama al proveedor. En sintética el
-`top_k` efectivo queda en 5 aunque el cliente pida más; `/api/search` sigue
-hasta 10.
-
-`CF_DAILY_BUDGET` y `JINA_DAILY_BUDGET` usan la misma idea con las claves
-`cloudflare:budget:YYYY-MM-DD` y `jina:budget:YYYY-MM-DD`; el contador sube
-solo cuando la API responde OK. Si el cupo está agotado, falta la credencial,
-la API responde mal o tarda más de 2 s, la búsqueda sigue en BM25. Un timeout,
-un 5xx o un 429 dejan la clave `cloudflare:circuit` o `jina:circuit` (o la
-pausa en memoria) por 90 s: la consulta siguiente no espera el timeout. El log
-anota el motivo (`sin_key`, `presupuesto`, `cuota`, `http_error`, `timeout`,
-`circuito`) y, si hubo HTTP, el status. Nunca la key. Un cache LRU de 500
-consultas repetidas no vuelve a llamar a la API.
-
-## Roadmap
-
-| Fase | Entregable | Estado |
-|------|------------|--------|
-| 0 | Andamiaje: FastAPI + React + CI + tests | ✅ |
-| 1 | Manual STELLA (40-60 pág) + PDF + ingest page-aware | ✅ |
-| 2 | Motor híbrido (FAISS+BM25+RRF) + gold set | ✅ |
-| 3 | `/api/chat` SSE + modos `fragmentos`/`sintetica` | ✅ |
-| 4 | UI React: chat + chips de cita `p. N` | ✅ |
-| 5 | Deploy Vercel | ✅ |
-| 6 | README final + GIF demo | ✅ |
-| 7 | Link desde el portafolio (botón en ficha STELLA) | ✅ |
-| 8 | LLM Groq + anti-relleno (stopwords, gate, snippet) + health con flags | ✅ |
-| 9 | Hardening: rate limit, errores saneados, cancelación en la UI, headers, CI con uv/oxlint/build | ✅ |
-| 10 | Gap semántico BM25: bonus de proximidad por bigrama → gold 12/12 | ✅ |
-| 11 | Workflow repo-first para nuevos documentos (corpus/ + manifiesto + ingest) | ✅ |
-| fut. | Modelo de embeddings cuantizado bundleado → denso en Vercel | ⬜ |
-| fut. | Upload en runtime (endpoint + Vercel Blob), si algún día hace falta | ⬜ |
+Lautaro Rodríguez · [GitHub](https://github.com/Rahyned)
