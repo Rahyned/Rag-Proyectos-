@@ -1,5 +1,46 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-24 — feat/mejora-docs-chunks
+
+### Added
+
+- `GLOSARIO_PESO` (default 0.5): baja el puntaje de chunks cuya sección es
+  glosario, sin sacarlos del índice. Configurable por entorno.
+- Gold de test a 100 casos; los 44 anteriores quedan marcados con `v1`
+  para el antes/después. Tuning sigue aparte, sin solaparse.
+- `scripts/eval_gold.py` imprime el corte `v1` vs completo (BM25 e híbrida);
+  con `--rerank` también en la comparación del reranker.
+- FAQ `¿Qué tiene el portafolio?` y textos de respuesta con sinónimos de
+  consulta (dirección, servicios, colorimetría, landing, contacto sin
+  formulario) en RioDent y portafolio-web.
+
+### Changed
+
+- BM25 indexa la ruta de sección junto al cuerpo (sigue sacando la cabecera
+  `Proyecto › Documento`).
+- Umbrales del gold: BM25 ≥ 90/100, híbrida ≥ 85/100 (híbrida pendiente de
+  medir tras reindexar con Cloudflare).
+- Los tests de gold hacen skip si el corpus cambió y todavía no hubo ingest.
+
+### Files
+
+- `corpus/laboratorio-riodent/laboratorio-riodent.md`
+- `corpus/portafolio-web/portafolio-web.md`
+- `data/gold_test.json`
+- `data/gold_tuning.json`
+- `rag/config.py`
+- `rag/hybrid.py`
+- `scripts/eval_gold.py`
+- `tests/test_gold.py`
+- `tests/test_ingest.py`
+- `tests/test_retriever.py`
+- `.env.example`
+- `CHANGELOG.md`
+
+### Tests
+
+`181 passed, 3 skipped`.
+
 ## 2026-10-24 — feat/reranker-cloudflare
 
 ### Added

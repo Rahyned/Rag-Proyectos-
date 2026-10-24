@@ -15,8 +15,8 @@ import numpy as np
 
 from .config import (BM25_B, BM25_BIGRAM_BONUS, BM25_K1, CHUNKS_PATH,
                      EMBED_MODEL, INDEX_PATH, RRF_K, TOP_K, dense_enabled,
-                     rerank_enabled, rerank_keep, rerank_mode, rerank_top_n,
-                     rerank_weight)
+                     glosario_peso, rerank_enabled, rerank_keep, rerank_mode,
+                     rerank_top_n, rerank_weight)
 from .embeddings import EmbedError, crear_embedder
 from .manifiesto import ManifiestoError, cargar, detectar_proyecto
 from .rerank import CloudflareReranker, RerankError, fusionar_rrf
@@ -118,17 +118,17 @@ def rrf(dense: np.ndarray, lex: np.ndarray, k: int = RRF_K) -> np.ndarray:
     return 1.0 / (k + r_dense) + 1.0 / (k + r_lex)
 
 
-def texto_lexico(text: str) -> str:
-    """BM25 no tokeniza la ruta «Proyecto › Documento › Sección».
+def texto_lexico(text: str, seccion: str = "") -> str:
+    """Cuerpo sin la ruta de proyecto/documento, más la ruta de sección.
 
-    Si entrara, el nombre del proyecto tendría idf 0 (está en todos los
-    chunks) y alargaría cada documento. La ruta sigue en el texto que se
+    El nombre del proyecto está en todos los chunks (idf 0) y alargaría cada
+    documento; la sección, en cambio, suele ser la pregunta que se busca
+    («¿Cómo hago un pedido?»). La ruta completa sigue en el texto que se
     embebe y en el que ve el modelo.
     """
     cabeza, sep, resto = text.partition("\n\n")
-    if sep and " › " in cabeza:
-        return resto
-    return text
+    cuerpo = resto if sep and " › " in cabeza else text
+    return f"{seccion}\n{cuerpo}" if seccion else cuerpo
 
 
 def load_chunks(path: Path = CHUNKS_PATH) -> list[dict]:
@@ -139,6 +139,11 @@ def load_chunks(path: Path = CHUNKS_PATH) -> list[dict]:
 def _plano(text: str) -> str:
     text = unicodedata.normalize("NFD", text.lower())
     return _ACCENT_RE.sub("", text)
+
+
+def _es_glosario(chunk: dict) -> bool:
+    """True si el chunk cuelga de una sección «Glosario»."""
+    return "glosario" in _plano(chunk.get("seccion") or "")
 
 
 def _documentos() -> dict[str, dict]:
@@ -214,7 +219,13 @@ class HybridRetriever:
                  embedder=None, reranker=None):
         self.chunks = load_chunks(chunks_path)
         self.index = faiss.read_index(str(index_path))
-        self._tokens_per_doc = [tokenize(texto_lexico(c["text"])) for c in self.chunks]
+        self._glosario_idx = [
+            i for i, c in enumerate(self.chunks) if _es_glosario(c)
+        ]
+        self._tokens_per_doc = [
+            tokenize(texto_lexico(c["text"], c.get("seccion", "")))
+            for c in self.chunks
+        ]
         self._df: dict[str, int] = {}
         for tokens in self._tokens_per_doc:
             for t in set(tokens):
@@ -260,10 +271,20 @@ class HybridRetriever:
         scores[idx] = sub
         return scores
 
+    def _peso_glosario(self, scores: np.ndarray) -> np.ndarray:
+        """Baja el puntaje de las entradas de glosario sin sacarlas del índice."""
+        peso = glosario_peso()
+        if peso >= 1.0:
+            return scores
+        out = scores.copy()
+        for i in self._glosario_idx:
+            out[i] *= peso
+        return out
+
     def bm25(self, query: str, top_k: int = TOP_K,
              proyecto: str | None = None) -> list[dict]:
         allowed = self._mascara(proyecto, query)
-        scores = self._lex(query, allowed)
+        scores = self._peso_glosario(self._lex(query, allowed))
         doc_id = self._doc_nombrado(query)
         if (
             doc_id
@@ -283,6 +304,9 @@ class HybridRetriever:
         """
         allowed = self._mascara(proyecto, query)
         lex = self._lex(query, allowed)
+        # El glosario se castiga en el ranking, no en el umbral: una pregunta
+        # que solo matchea una definición igual abre el gate.
+        lex_rank = self._peso_glosario(lex)
         nombres = self._nombres_en(query)
         lex_umbral = self._lex(query, allowed, ignorar=nombres) if nombres else lex
         top1 = float(lex_umbral.max()) if lex_umbral.size else 0.0
@@ -295,14 +319,14 @@ class HybridRetriever:
             # «¿Qué es X?», «¿cómo funciona X?» y similares priorizan la
             # introducción aunque el término X esté en casi todo el manual
             # y el BM25 no la ponga primera.
-            return self._hits_priorizando_intro(lex, top_k, doc_id)
+            return self._hits_priorizando_intro(lex_rank, top_k, doc_id)
         if top1 < MIN_TOP1_SCORE:
             if (
                 doc_id
                 and self._doc_en(doc_id, allowed)
                 and self._tiene_termino(query, allowed, ignorar=nombres)
             ):
-                return self._hits_priorizando_intro(lex, top_k, doc_id)
+                return self._hits_priorizando_intro(lex_rank, top_k, doc_id)
             return []
         global LAST_DENSE_ERROR
         if (
@@ -332,7 +356,7 @@ class HybridRetriever:
                 log.warning("embeddings no disponible (error); usando BM25")
             else:
                 return self._aplicar_rerank(query, hits, top_k)
-        return self._hits(lex, top_k, engine="bm25")
+        return self._hits(lex_rank, top_k, engine="bm25")
 
     def _aplicar_rerank(self, query: str, hits: list[dict],
                         top_k: int) -> list[dict]:
@@ -384,7 +408,7 @@ class HybridRetriever:
                 rango += 1
         combinado = np.zeros(self._n, dtype=np.float32)
         combinado[sub] = rrf(dense[sub], lex[sub])
-        return self._hits(combinado, top_k, engine="hibrida")
+        return self._hits(self._peso_glosario(combinado), top_k, engine="hibrida")
 
     def _doc_nombrado(self, query: str) -> str | None:
         tokens = set(tokenize(query))

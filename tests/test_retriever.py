@@ -170,11 +170,19 @@ def test_detecta_alias_de_los_proyectos_nuevos():
     assert detectar_proyecto("abrí el portafolio") == "portafolio-web"
 
 
-def test_copia_de_seguridad_trae_la_pagina_de_backups(monkeypatch):
+def test_copia_de_seguridad_trae_backup_o_faq(monkeypatch):
+    """La sección en el léxico prioriza la FAQ; el capítulo de backups sigue cerca."""
     monkeypatch.setenv("RAG_DENSE", "0")
-    pages = [h["page"] for h in _retriever().search(
-        "¿Cómo hago una copia de seguridad?", 5)]
-    assert 31 in pages[:3]
+    hits = _retriever().search("¿Cómo hago una copia de seguridad?", 5)
+    assert hits
+    top3 = hits[:3]
+    pages = [h["page"] for h in top3]
+    secciones = [(h.get("seccion") or "").lower() for h in top3]
+    assert (
+        31 in pages
+        or any("copia de seguridad" in s for s in secciones)
+    )
+    assert 31 in [h["page"] for h in hits[:5]]
 
 
 def test_cobrarle_a_un_dentista_trae_cuentas_corrientes(monkeypatch):
@@ -239,6 +247,55 @@ def test_agregar_un_cliente_no_se_reescribe():
 
     pesos = dict(expandir(tokenize("agregar un cliente")))
     assert pesos == {"agreg": 1.0, "client": 1.0}
+
+
+def test_texto_lexico_saca_la_cabecera_y_suma_la_seccion():
+    from rag.hybrid import texto_lexico
+
+    texto = "STELLA › Manual STELLA › Clientes\n\nAgregar un cliente nuevo."
+    salida = texto_lexico(texto, "Manual STELLA › Clientes")
+    assert salida.startswith("Manual STELLA › Clientes\n")
+    assert "STELLA › Manual STELLA" not in salida
+    assert "Agregar un cliente nuevo." in salida
+    assert texto_lexico(texto) == "Agregar un cliente nuevo."
+
+
+def test_es_glosario_mira_la_seccion():
+    from rag.hybrid import _es_glosario
+
+    assert _es_glosario({"seccion": "Laboratorio RioDent › Glosario › Cadetería"})
+    assert not _es_glosario(
+        {"seccion": "Laboratorio RioDent › Preguntas frecuentes › ¿Hacen envíos?"}
+    )
+
+
+def test_glosario_peso_default_y_validacion(monkeypatch):
+    from rag.config import glosario_peso
+
+    monkeypatch.delenv("GLOSARIO_PESO", raising=False)
+    assert glosario_peso() == 0.5
+    monkeypatch.setenv("GLOSARIO_PESO", "0.8")
+    assert glosario_peso() == 0.8
+    for malo in ("", "abc", "-0.1", "1.1"):
+        monkeypatch.setenv("GLOSARIO_PESO", malo)
+        assert glosario_peso() == 0.5
+    monkeypatch.setenv("GLOSARIO_PESO", "1")
+    assert glosario_peso() == 1.0
+
+
+def test_peso_glosario_demota_solo_el_glosario(monkeypatch):
+    import numpy as np
+
+    from rag.hybrid import HybridRetriever
+
+    monkeypatch.setenv("GLOSARIO_PESO", "0.5")
+    retriever = HybridRetriever.__new__(HybridRetriever)
+    retriever._glosario_idx = [0]
+    salida = retriever._peso_glosario(np.array([1.0, 1.0], dtype=np.float32))
+    assert salida.tolist() == [0.5, 1.0]
+    monkeypatch.setenv("GLOSARIO_PESO", "1")
+    salida = retriever._peso_glosario(np.array([1.0, 1.0], dtype=np.float32))
+    assert salida.tolist() == [1.0, 1.0]
 
 
 def test_search_real_agrega_snippet(monkeypatch):

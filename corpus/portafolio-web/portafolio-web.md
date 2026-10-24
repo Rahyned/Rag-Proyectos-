@@ -198,6 +198,10 @@ En portafolio-web, el formulario de contacto y el chat del Profesor Oak quedaron
 
 Es portafolio-web, el sitio LAUTARO.DEV de Lautaro Rodriguez. Muestra proyectos, servicios y un formulario para encargar un trabajo, con look de juego retro.
 
+### ¿Qué tiene el portafolio?
+
+portafolio-web tiene tres partes: la presentación de Lautaro (ficha, servicios y currículum), la PC de proyectos con cajas de desarrollo web, sistemas y apps de escritorio, y el contacto con formulario y canales directos. También incluye el chat del Profesor Oak y la terminal.
+
 ### ¿Quién lo hizo y de dónde es?
 
 portafolio-web presenta a Lautaro Rodriguez, desarrollador web y de sistemas. La ficha pública dice Rosario, Argentina.
@@ -216,7 +220,7 @@ En portafolio-web no se compra con carrito. Un pedido de trabajo es el formulari
 
 ### ¿Cuánto sale?
 
-portafolio-web no publica precios. El formulario pide un rango: pequeño, mediano o grande, sin montos. El número se habla después, por el email que dejes.
+Una página web o un sitio no tiene un precio fijo en portafolio-web: no se publican precios. El formulario pide un rango de presupuesto (pequeño, mediano o grande), sin montos. El número se habla después, por el email que dejes.
 
 ### ¿Cuánto tarda?
 
@@ -232,7 +236,7 @@ La ficha de STELLA en portafolio-web puede abrir un asistente público de proyec
 
 ### ¿Cómo lo contacto si no quiero el formulario?
 
-El PokéNav de portafolio-web muestra correo, LinkedIn, GitHub y WhatsApp. Los datos concretos están en esa sección de la página, no en este documento. GitHub público: https://github.com/Rahyned
+El PokéNav de Lautaro en portafolio-web muestra correo, LinkedIn, GitHub y WhatsApp. Los datos concretos están en esa sección de la página, no en este documento. GitHub público: https://github.com/Rahyned
 
 ### ¿Dónde veo los proyectos?
 

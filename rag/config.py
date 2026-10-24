@@ -107,6 +107,22 @@ def _int_env(name: str, default: int) -> int:
     return valor if valor > 0 else default
 
 
+def glosario_peso() -> float:
+    """Peso de una entrada de glosario en el ranking (1.0 = sin castigo).
+
+    Las definiciones repiten el término que buscan las consultas cortas y
+    tapan la respuesta real; se les baja el puntaje sin sacarlas del índice.
+    """
+    raw = os.getenv("GLOSARIO_PESO", "").strip()
+    if not raw:
+        return 0.5
+    try:
+        valor = float(raw)
+    except ValueError:
+        return 0.5
+    return valor if 0.0 <= valor <= 1.0 else 0.5
+
+
 def rerank_enabled() -> bool:
     """`RERANK_ENABLED=1|true|si|yes|on` activa el reranker. Default: apagado."""
     raw = os.getenv("RERANK_ENABLED", "").strip().lower()
