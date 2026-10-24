@@ -3,6 +3,10 @@
 Si `EMBEDDINGS_PROVIDER` está definida, se respeta (por ejemplo `off` para
 medir solo BM25). Si no, con `JINA_API_KEY` usa Jina y sin key apaga el
 denso: el modelo local (ONNX) no se carga.
+
+`--rerank` agrega la comparación del gold de test con y sin reranker, cada
+una con su top 3 y top 5. Necesita `CF_ACCOUNT_ID` y `CF_API_TOKEN`; sin
+credenciales la comparación se omite (no se inventan números).
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ if not os.environ.get("EMBEDDINGS_PROVIDER", "").strip():
     else:
         os.environ["EMBEDDINGS_PROVIDER"] = "off"
 
+from app import config as app_config  # noqa: E402
 from rag.config import TOP_K  # noqa: E402
 from tests.test_gold import (  # noqa: E402
     GOLD_TEST_PATH,
@@ -108,8 +113,26 @@ def _casos(retriever) -> None:
             print(f"      {i}. {hit.get('proyecto')} / {lugar}")
 
 
+def _comparar_reranker(retriever, entries: list[dict],
+                       timeout: float = 20.0) -> None:
+    """Mide el mismo gold con el orden del RRF y con el reranker."""
+    print("\ntest — con y sin reranker (top 3 / top 5)")
+    os.environ["RERANK_ENABLED"] = "0"
+    try:
+        _tabla(retriever, entries, "hibrida (RRF)")
+        os.environ["RERANK_ENABLED"] = "1"
+        # Igual que EMBED_TIMEOUT: la medición prioriza calidad, no latencia.
+        reranker = getattr(retriever, "_reranker", None)
+        if reranker is not None:
+            reranker.timeout = timeout
+        _tabla(retriever, entries, "hibrida + reranker")
+    finally:
+        os.environ.pop("RERANK_ENABLED", None)
+
+
 def main() -> None:
     hibrida = os.environ.get("EMBEDDINGS_PROVIDER", "").strip().lower() != "off"
+    comparar = "--rerank" in sys.argv[1:]
     if hibrida:
         import rag.embeddings as embeddings
 
@@ -117,14 +140,26 @@ def main() -> None:
         # si vence, el circuito se abre y el resto de la tabla cae a BM25.
         embeddings.EMBED_TIMEOUT = 20.0
     print("denso:", "hibrida (API)" if hibrida else "apagado, solo BM25")
+    if comparar and not hibrida:
+        print("reranker: el denso está apagado; no hay híbrida que reordenar")
+        comparar = False
+    if comparar and not (app_config.cf_account_id() and app_config.cf_api_token()):
+        print(
+            "reranker: faltan CF_ACCOUNT_ID y CF_API_TOKEN; "
+            "se omite la comparación con y sin reranker"
+        )
+        comparar = False
     retriever = _retriever()
-    for etiqueta, path in (("tuning", GOLD_TUNING_PATH), ("test", GOLD_TEST_PATH)):
+    for etiqueta, path in (("tuning", GOLD_TUNING_PATH),
+                           ("test", GOLD_TEST_PATH)):
         entries = _leer(path)
         print(f"\n{etiqueta}")
         _tabla(retriever, entries, "bm25")
         if hibrida:
             _tabla(retriever, entries, "hibrida")
         _negativas(retriever, entries, etiqueta)
+    if comparar:
+        _comparar_reranker(retriever, _leer(GOLD_TEST_PATH))
     print()
     _casos(retriever)
 

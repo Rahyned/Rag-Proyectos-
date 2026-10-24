@@ -1,5 +1,47 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-24 — feat/reranker-cloudflare
+
+### Added
+
+- Reranker de Cloudflare Workers AI (`@cf/baai/bge-reranker-base`) después
+  del RRF: el híbrido pide `RERANK_TOP_N` (20) candidatos, los reordena y
+  deja `RERANK_KEEP` (5) para el LLM.
+- `RERANK_ENABLED` (default apagado), `RERANK_TOP_N` y `RERANK_KEEP` en
+  `.env.example`.
+- `scripts/eval_gold.py --rerank`: mide el gold de test con y sin reranker,
+  con top 3 y top 5 de cada uno.
+- Tests del reranker con httpx falso: reordenamiento, empate estable, cupo,
+  timeout, errores HTTP y caída al RRF ante error, timeout y presupuesto.
+
+### Changed
+
+- El reranker comparte `CF_ACCOUNT_ID`, `CF_API_TOKEN`, `CF_DAILY_BUDGET` y
+  el circuito de Cloudflare con los embeddings: no puede gastar de más.
+- Con el reranker activo el `top_k` se recorta a `RERANK_KEEP`.
+- `HybridRetriever` acepta un `reranker` inyectable (mismo patrón que
+  `embedder`).
+
+### Fixed
+
+- Un fallo del reranker (key, cupo, circuito, HTTP o más de 2 s) deja el
+  orden del RRF, registra el motivo en el log y no rompe la respuesta.
+
+### Files
+
+- `rag/rerank.py`
+- `rag/config.py`
+- `rag/hybrid.py`
+- `scripts/eval_gold.py`
+- `tests/test_rerank.py`
+- `tests/conftest.py`
+- `.env.example`
+- `CHANGELOG.md`
+
+### Tests
+
+`171 passed, 1 skipped`.
+
 ## 2026-10-23 — main
 
 ### Added

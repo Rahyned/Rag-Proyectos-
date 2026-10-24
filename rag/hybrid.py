@@ -14,9 +14,11 @@ import faiss
 import numpy as np
 
 from .config import (BM25_B, BM25_BIGRAM_BONUS, BM25_K1, CHUNKS_PATH,
-                     EMBED_MODEL, INDEX_PATH, RRF_K, TOP_K, dense_enabled)
+                     EMBED_MODEL, INDEX_PATH, RRF_K, TOP_K, dense_enabled,
+                     rerank_enabled, rerank_keep, rerank_top_n)
 from .embeddings import EmbedError, crear_embedder
 from .manifiesto import ManifiestoError, cargar, detectar_proyecto
+from .rerank import CloudflareReranker, RerankError
 from .sinonimos import expandir
 
 log = logging.getLogger("rag.hybrid")
@@ -208,7 +210,7 @@ class HybridRetriever:
     def __init__(self, chunks_path: Path = CHUNKS_PATH,
                  index_path: Path = INDEX_PATH,
                  embed_model: str = EMBED_MODEL,
-                 embedder=None):
+                 embedder=None, reranker=None):
         self.chunks = load_chunks(chunks_path)
         self.index = faiss.read_index(str(index_path))
         self._tokens_per_doc = [tokenize(texto_lexico(c["text"])) for c in self.chunks]
@@ -220,6 +222,11 @@ class HybridRetriever:
         self._model_name = embed_model
         # None explícito arma el proveedor según el entorno; un objeto lo inyecta.
         self._embedder = crear_embedder() if embedder is None else embedder
+        # Se arma siempre: `RERANK_ENABLED` se consulta por consulta, así el
+        # mismo retriever sirve para comparar con y sin reranker.
+        self._reranker = (
+            CloudflareReranker() if reranker is None else reranker
+        )
         self._dense_error: str | None = None
 
     def _mascara(self, proyecto: str | None, query: str) -> np.ndarray:
@@ -267,10 +274,11 @@ class HybridRetriever:
 
     def search(self, query: str, top_k: int = TOP_K,
                proyecto: str | None = None) -> list[dict]:
-        """Híbrida (RRF) con degradación segura a BM25.
+        """Híbrida (RRF) con degradación segura a BM25 y reranker opcional.
 
         Nunca lanza por problemas del canal denso: sin key, con la API caída,
         con timeout o con el modelo local roto, responde igual con lo léxico.
+        Si el reranker falla, queda el orden del RRF.
         """
         allowed = self._mascara(proyecto, query)
         lex = self._lex(query, allowed)
@@ -302,7 +310,10 @@ class HybridRetriever:
             and self._dense_error is None
         ):
             try:
-                return self._search_hybrid(query, top_k, allowed, lex)
+                # Con reranker se piden más candidatos: el RRF ordena el pool
+                # y el reranker decide el top final.
+                pool = max(top_k, rerank_top_n()) if rerank_enabled() else top_k
+                hits = self._search_hybrid(query, pool, allowed, lex)
             except EmbedError as exc:
                 LAST_DENSE_ERROR = exc.motivo
                 log.warning(
@@ -318,7 +329,27 @@ class HybridRetriever:
                 self._dense_error = msg
                 LAST_DENSE_ERROR = msg
                 log.warning("embeddings no disponible (error); usando BM25")
+            else:
+                return self._aplicar_rerank(query, hits, top_k)
         return self._hits(lex, top_k, engine="bm25")
+
+    def _aplicar_rerank(self, query: str, hits: list[dict],
+                        top_k: int) -> list[dict]:
+        """Reordena el pool híbrido. Nunca lanza: si falla, queda el orden RRF."""
+        if not rerank_enabled() or self._reranker is None or len(hits) < 2:
+            return hits[:top_k]
+        try:
+            reordenados = self._reranker.reordenar(query, hits)
+        except RerankError as exc:
+            log.warning("rerank no disponible (%s); usando orden RRF", exc.motivo)
+            return hits[:top_k]
+        except Exception as exc:  # noqa: BLE001 — el orden RRF siempre sirve
+            log.warning(
+                "rerank no disponible (error: %s); usando orden RRF",
+                str(exc)[:200],
+            )
+            return hits[:top_k]
+        return reordenados[: min(top_k, rerank_keep())]
 
     def _vector_consulta(self, query: str) -> np.ndarray:
         vec = self._embedder.embed_consulta(query)
