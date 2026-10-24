@@ -95,6 +95,52 @@ def _float_env(name: str, default: float) -> float:
     return valor if valor > 0 else default
 
 
+def _int_env(name: str, default: int) -> int:
+    """Lee un int positivo del entorno; si falta, no es válido o es <= 0, usa el default."""
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        valor = int(raw)
+    except ValueError:
+        return default
+    return valor if valor > 0 else default
+
+
+def rerank_enabled() -> bool:
+    """`RERANK_ENABLED=1|true|si|yes|on` activa el reranker. Default: apagado."""
+    raw = os.getenv("RERANK_ENABLED", "").strip().lower()
+    return raw in ("1", "true", "si", "sí", "yes", "on")
+
+
+def rerank_top_n() -> int:
+    """Candidatos que recibe el reranker. Vacío o inválido = 20."""
+    return _int_env("RERANK_TOP_N", 20)
+
+
+def rerank_keep() -> int:
+    """Hits que sobreviven al reranker (tope del top_k). Vacío o inválido = 5."""
+    return _int_env("RERANK_KEEP", 5)
+
+
+def rerank_mode() -> str:
+    """`fuse` (default) recombina con el RRF; `replace` usa solo el reranker."""
+    raw = os.getenv("RERANK_MODE", "").strip().lower()
+    return "replace" if raw == "replace" else "fuse"
+
+
+def rerank_weight() -> float:
+    """Peso del reranker en `fuse`. 0 = solo RRF, 1 = solo reranker. Default 0.5."""
+    raw = os.getenv("RERANK_WEIGHT", "").strip()
+    if not raw:
+        return 0.5
+    try:
+        valor = float(raw)
+    except ValueError:
+        return 0.5
+    return valor if 0.0 <= valor <= 1.0 else 0.5
+
+
 # Modelo servido por la API de Jina. Mismo espacio que el ONNX local si el
 # coseno de los mismos textos da ≥ 0.99; si no, el índice se rehace con la API.
 JINA_EMBED_MODEL = "jina-embeddings-v2-base-es"
@@ -109,3 +155,17 @@ CF_EMBED_URL = (
 # Con una API lenta es preferible responder por BM25 antes que esperar de más.
 EMBED_TIMEOUT = _float_env("EMBED_TIMEOUT_S", 2.0)
 EMBED_CACHE_SIZE = 500
+
+# Reranker de Workers AI: recibe la consulta y los textos candidatos y
+# devuelve un score por pasaje. Mismo cupo y credenciales que los embeddings.
+CF_RERANK_MODEL = "@cf/baai/bge-reranker-base"
+CF_RERANK_URL = (
+    "https://api.cloudflare.com/client/v4/accounts/"
+    "{account_id}/ai/run/@cf/baai/bge-reranker-base"
+)
+# Presupuesto de la consulta completa: si el reranker tarda más, se responde
+# con el orden del RRF (la latencia no se negocia con el usuario esperando).
+RERANK_TIMEOUT = 2.0
+# El cache evita repetir la misma llamada (y el cupo) cuando se comparan
+# modos o pesos sobre el mismo pool, como hace la evaluación.
+RERANK_CACHE_SIZE = 500

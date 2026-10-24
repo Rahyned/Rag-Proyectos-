@@ -12,6 +12,11 @@ def _reset_ratelimit(monkeypatch):
     monkeypatch.delenv("CF_ACCOUNT_ID", raising=False)
     monkeypatch.delenv("CF_API_TOKEN", raising=False)
     monkeypatch.delenv("EMBEDDINGS_PROVIDER", raising=False)
+    monkeypatch.delenv("RERANK_ENABLED", raising=False)
+    monkeypatch.delenv("RERANK_TOP_N", raising=False)
+    monkeypatch.delenv("RERANK_KEEP", raising=False)
+    monkeypatch.delenv("RERANK_MODE", raising=False)
+    monkeypatch.delenv("RERANK_WEIGHT", raising=False)
     ratelimit.reset()
     yield
     ratelimit.reset()
