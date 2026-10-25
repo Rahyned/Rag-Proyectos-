@@ -11,9 +11,11 @@ ya estaba al límite.
 """
 
 import logging
+import os
 import threading
 import time
 from collections import defaultdict, deque
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import httpx
@@ -48,8 +50,17 @@ _JINA_CIRCUIT_KEY = "jina:circuit"
 # Último origen visto, aunque el circuito todavía no se haya abierto. Lo lee
 # /api/health en cualquier instancia.
 _JINA_LAST_ERROR_KEY = "jina:last_error"
-_CLOUDFLARE_CIRCUIT_KEY = "cloudflare:circuit"
-_CLOUDFLARE_LAST_ERROR_KEY = "cloudflare:last_error"
+# Prefijos Redis/memoria de Cloudflare. Embeddings de prod, reranker de prod
+# y la eval (scripts/eval_gold.py) no se pisan entre sí.
+LANE_CLOUDFLARE = "cloudflare"
+LANE_RERANK = "rerank"
+LANE_EVAL_CLOUDFLARE = "eval:cloudflare"
+_CLOUDFLARE_CIRCUIT_KEY = f"{LANE_CLOUDFLARE}:circuit"
+_CLOUDFLARE_LAST_ERROR_KEY = f"{LANE_CLOUDFLARE}:last_error"
+_RERANK_CIRCUIT_KEY = f"{LANE_RERANK}:circuit"
+_RERANK_LAST_ERROR_KEY = f"{LANE_RERANK}:last_error"
+_EVAL_CF_CIRCUIT_KEY = f"{LANE_EVAL_CLOUDFLARE}:circuit"
+_EVAL_CF_LAST_ERROR_KEY = f"{LANE_EVAL_CLOUDFLARE}:last_error"
 _DENSE_ORIGENES = frozenset(("timeout", "status_429", "status_5xx"))
 _JINA_ORIGENES = _DENSE_ORIGENES
 
@@ -66,6 +77,16 @@ _IP_HEADERS = (
     "x-forwarded-for",
 )
 
+
+@dataclass
+class _CfLane:
+    """Cupo y circuito de un carril Cloudflare (prod, rerank o eval)."""
+
+    pause_until: float = 0.0
+    fallos: deque = field(default_factory=lambda: deque(maxlen=64))
+    origen: str | None = None
+
+
 _lock = threading.Lock()
 _hits: dict[str, deque[float]] = defaultdict(deque)
 _groq_429: deque[float] = deque(maxlen=64)
@@ -73,9 +94,11 @@ _budget: dict[str, int] = {}
 _jina_pause_until = 0.0
 _jina_fallos: deque[float] = deque(maxlen=64)
 _jina_origen: str | None = None
-_cloudflare_pause_until = 0.0
-_cloudflare_fallos: deque[float] = deque(maxlen=64)
-_cloudflare_origen: str | None = None
+_cf: dict[str, _CfLane] = {
+    LANE_CLOUDFLARE: _CfLane(),
+    LANE_RERANK: _CfLane(),
+    LANE_EVAL_CLOUDFLARE: _CfLane(),
+}
 
 
 def client_ip(request: Request) -> str:
@@ -315,14 +338,65 @@ def _anotar(prefix: str, budget: int) -> None:
     _anotar_memoria(prefix)
 
 
+def uso_eval() -> bool:
+    """True si la corrida es de eval (`CF_USAGE_SCOPE=eval`)."""
+    return os.getenv("CF_USAGE_SCOPE", "").strip().lower() == "eval"
+
+
+def lane_embeddings() -> str:
+    """Carril de cupo/circuito para embeddings Cloudflare."""
+    return LANE_EVAL_CLOUDFLARE if uso_eval() else LANE_CLOUDFLARE
+
+
+def lane_rerank() -> str:
+    """Carril de cupo/circuito para el reranker Cloudflare."""
+    return LANE_EVAL_CLOUDFLARE if uso_eval() else LANE_RERANK
+
+
+def _budget_lane(lane: str) -> int:
+    if lane == LANE_EVAL_CLOUDFLARE:
+        return config.cf_eval_daily_budget()
+    if lane == LANE_RERANK:
+        return config.cf_rerank_daily_budget()
+    return config.cf_daily_budget()
+
+
+def _cf_lane(lane: str) -> _CfLane:
+    estado = _cf.get(lane)
+    if estado is None:
+        estado = _CfLane()
+        _cf[lane] = estado
+    return estado
+
+
+def puede_llamar_cf(lane: str) -> bool:
+    """True si el cupo diario del carril todavía no se agotó. No lo descuenta."""
+    return _cupo_disponible(lane, _budget_lane(lane))
+
+
+def anotar_llamada_cf(lane: str) -> None:
+    """Descuenta una llamada del carril que respondió OK."""
+    _anotar(lane, _budget_lane(lane))
+
+
 def puede_llamar_cloudflare() -> bool:
-    """True si el cupo diario de Cloudflare todavía no se agotó. No lo descuenta."""
-    return _cupo_disponible("cloudflare", config.cf_daily_budget())
+    """Cupo de embeddings Cloudflare en producción."""
+    return puede_llamar_cf(LANE_CLOUDFLARE)
 
 
 def anotar_llamada_cloudflare() -> None:
-    """Descuenta una llamada a Cloudflare que respondió OK."""
-    _anotar("cloudflare", config.cf_daily_budget())
+    """Descuenta una llamada de embeddings Cloudflare en producción."""
+    anotar_llamada_cf(LANE_CLOUDFLARE)
+
+
+def puede_llamar_rerank() -> bool:
+    """Cupo del reranker Cloudflare en producción."""
+    return puede_llamar_cf(LANE_RERANK)
+
+
+def anotar_llamada_rerank() -> None:
+    """Descuenta una llamada del reranker en producción."""
+    anotar_llamada_cf(LANE_RERANK)
 
 
 def puede_llamar_jina() -> bool:
@@ -452,113 +526,155 @@ def jina_origen_circuito() -> str | None:
     return valor if valor in _JINA_ORIGENES else None
 
 
-def _guardar_origen_cloudflare(origen: str) -> None:
-    """Recuerda el último fallo de Cloudflare en memoria y en Redis."""
-    global _cloudflare_origen
+def _guardar_origen_cf(lane: str, origen: str) -> None:
+    """Recuerda el último fallo del carril en memoria y en Redis."""
+    estado = _cf_lane(lane)
     with _lock:
-        _cloudflare_origen = origen
+        estado.origen = origen
     if not _redis_configured():
         return
     try:
         _redis_pipeline([[
-            "SET", _CLOUDFLARE_LAST_ERROR_KEY, origen,
+            "SET", f"{lane}:last_error", origen,
             "EX", CLOUDFLARE_CIRCUIT_SECONDS,
         ]])
     except Exception as exc:  # noqa: BLE001
         log.warning(
-            "no se pudo guardar el origen de cloudflare en Redis (%s)", exc
+            "no se pudo guardar el origen de %s en Redis (%s)", lane, exc
         )
 
 
-def cloudflare_en_pausa() -> bool:
-    """True si un fallo reciente dejó Cloudflare en pausa (memoria o Upstash)."""
-    global _cloudflare_origen
+def cf_en_pausa(lane: str) -> bool:
+    """True si un fallo reciente dejó el carril en pausa (memoria o Upstash)."""
+    estado = _cf_lane(lane)
     now = time.monotonic()
     with _lock:
-        if now < _cloudflare_pause_until:
+        if now < estado.pause_until:
             return True
     if not _redis_configured():
         return False
     try:
-        data = _redis_pipeline([["GET", _CLOUDFLARE_CIRCUIT_KEY]])
+        data = _redis_pipeline([["GET", f"{lane}:circuit"]])
     except Exception as exc:  # noqa: BLE001 — sin Redis, vale la memoria
         log.warning(
-            "Redis no disponible (%s); circuito de cloudflare en memoria", exc
+            "Redis no disponible (%s); circuito de %s en memoria", exc, lane
         )
         return False
     valor = data[0]["result"]
     if valor in _DENSE_ORIGENES:
         # Otra instancia abrió el circuito: el origen viaja en la clave.
         with _lock:
-            _cloudflare_origen = valor
+            estado.origen = valor
     return bool(valor)
 
 
-def abrir_pausa_cloudflare(origen: str | None = None) -> None:
-    """Pausa Cloudflare CLOUDFLARE_CIRCUIT_SECONDS."""
-    global _cloudflare_pause_until
+def abrir_pausa_cf(lane: str, origen: str | None = None) -> None:
+    """Pausa el carril CLOUDFLARE_CIRCUIT_SECONDS."""
+    estado = _cf_lane(lane)
     if origen:
-        _guardar_origen_cloudflare(origen)
+        _guardar_origen_cf(lane, origen)
     hasta = time.monotonic() + CLOUDFLARE_CIRCUIT_SECONDS
     with _lock:
-        _cloudflare_pause_until = hasta
+        estado.pause_until = hasta
     if not _redis_configured():
         return
     try:
         _redis_pipeline([[
-            "SET", _CLOUDFLARE_CIRCUIT_KEY, origen or "1",
+            "SET", f"{lane}:circuit", origen or "1",
             "EX", CLOUDFLARE_CIRCUIT_SECONDS,
         ]])
     except Exception as exc:  # noqa: BLE001
         log.warning(
-            "no se pudo abrir el circuito de cloudflare en Redis (%s)", exc
+            "no se pudo abrir el circuito de %s en Redis (%s)", lane, exc
         )
 
 
-def anotar_fallo_cloudflare(origen: str) -> None:
-    """Registra un fallo de Cloudflare y abre el circuito cuando corresponde.
+def anotar_fallo_cf(lane: str, origen: str) -> None:
+    """Registra un fallo del carril y abre el circuito cuando corresponde.
 
     Un 429 abre enseguida. Un timeout o un 5xx abre al segundo dentro de
     CLOUDFLARE_FAIL_WINDOW_SECONDS; el primer fallo solo queda registrado
     como origen.
     """
+    estado = _cf_lane(lane)
     if origen == "status_429":
-        abrir_pausa_cloudflare(origen)
+        abrir_pausa_cf(lane, origen)
         return
     now = time.monotonic()
     with _lock:
         while (
-            _cloudflare_fallos
-            and now - _cloudflare_fallos[0] > CLOUDFLARE_FAIL_WINDOW_SECONDS
+            estado.fallos
+            and now - estado.fallos[0] > CLOUDFLARE_FAIL_WINDOW_SECONDS
         ):
-            _cloudflare_fallos.popleft()
-        _cloudflare_fallos.append(now)
-        abrir = len(_cloudflare_fallos) >= CLOUDFLARE_FAIL_TRIP
+            estado.fallos.popleft()
+        estado.fallos.append(now)
+        abrir = len(estado.fallos) >= CLOUDFLARE_FAIL_TRIP
         if abrir:
-            _cloudflare_fallos.clear()
+            estado.fallos.clear()
     if abrir:
-        abrir_pausa_cloudflare(origen)
+        abrir_pausa_cf(lane, origen)
     else:
-        _guardar_origen_cloudflare(origen)
+        _guardar_origen_cf(lane, origen)
 
 
-def cloudflare_origen_circuito() -> str | None:
-    """Último motivo denso de Cloudflare (timeout / status_429 / status_5xx)."""
+def cf_origen_circuito(lane: str) -> str | None:
+    """Último motivo denso del carril (timeout / status_429 / status_5xx)."""
+    estado = _cf_lane(lane)
     with _lock:
-        local = _cloudflare_origen
+        local = estado.origen
     if local in _DENSE_ORIGENES:
         return local
     if not _redis_configured():
         return None
     try:
-        data = _redis_pipeline([["GET", _CLOUDFLARE_LAST_ERROR_KEY]])
+        data = _redis_pipeline([["GET", f"{lane}:last_error"]])
     except Exception as exc:  # noqa: BLE001 — sin Redis, vale la memoria
         log.warning(
-            "Redis no disponible (%s); origen de cloudflare en memoria", exc
+            "Redis no disponible (%s); origen de %s en memoria", exc, lane
         )
         return None
     valor = data[0]["result"] if data else None
     return valor if valor in _DENSE_ORIGENES else None
+
+
+def cloudflare_en_pausa() -> bool:
+    """Circuito de embeddings Cloudflare en producción."""
+    return cf_en_pausa(LANE_CLOUDFLARE)
+
+
+def abrir_pausa_cloudflare(origen: str | None = None) -> None:
+    """Pausa embeddings Cloudflare en producción."""
+    abrir_pausa_cf(LANE_CLOUDFLARE, origen)
+
+
+def anotar_fallo_cloudflare(origen: str) -> None:
+    """Fallo de embeddings Cloudflare en producción."""
+    anotar_fallo_cf(LANE_CLOUDFLARE, origen)
+
+
+def cloudflare_origen_circuito() -> str | None:
+    """Origen del circuito de embeddings Cloudflare en producción."""
+    return cf_origen_circuito(LANE_CLOUDFLARE)
+
+
+def rerank_en_pausa() -> bool:
+    """Circuito del reranker Cloudflare en producción."""
+    return cf_en_pausa(LANE_RERANK)
+
+
+def abrir_pausa_rerank(origen: str | None = None) -> None:
+    """Pausa el reranker Cloudflare en producción."""
+    abrir_pausa_cf(LANE_RERANK, origen)
+
+
+def anotar_fallo_rerank(origen: str) -> None:
+    """Fallo del reranker Cloudflare en producción."""
+    anotar_fallo_cf(LANE_RERANK, origen)
+
+
+def rerank_origen_circuito() -> str | None:
+    """Origen del circuito del reranker Cloudflare en producción."""
+    return cf_origen_circuito(LANE_RERANK)
 
 
 def note_groq_429() -> None:
@@ -577,7 +693,6 @@ def groq_limited() -> bool:
 def reset() -> None:
     """Solo para tests."""
     global _jina_pause_until, _jina_origen
-    global _cloudflare_pause_until, _cloudflare_origen
     with _lock:
         _hits.clear()
         _groq_429.clear()
@@ -585,6 +700,7 @@ def reset() -> None:
         _jina_fallos.clear()
         _jina_pause_until = 0.0
         _jina_origen = None
-        _cloudflare_fallos.clear()
-        _cloudflare_pause_until = 0.0
-        _cloudflare_origen = None
+        for estado in _cf.values():
+            estado.fallos.clear()
+            estado.pause_until = 0.0
+            estado.origen = None

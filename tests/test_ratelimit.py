@@ -190,7 +190,33 @@ def test_cupo_de_cloudflare_es_independiente(monkeypatch):
     ratelimit.anotar_llamada_cloudflare()
     assert not ratelimit.puede_llamar_cloudflare()
     assert ratelimit.puede_llamar_jina()
+    assert ratelimit.puede_llamar_rerank()
     assert any(k.startswith("cloudflare:budget:") for k in ratelimit._budget)
+
+
+def test_cupo_de_rerank_no_pisa_embeddings(monkeypatch):
+    monkeypatch.setenv("CF_DAILY_BUDGET", "1")
+    monkeypatch.setenv("CF_RERANK_DAILY_BUDGET", "1")
+    ratelimit.anotar_llamada_rerank()
+    assert not ratelimit.puede_llamar_rerank()
+    assert ratelimit.puede_llamar_cloudflare()
+    assert any(k.startswith("rerank:budget:") for k in ratelimit._budget)
+    assert not any(k.startswith("cloudflare:budget:") for k in ratelimit._budget)
+
+
+def test_cupo_de_eval_no_pisa_produccion(monkeypatch):
+    monkeypatch.setenv("CF_DAILY_BUDGET", "1")
+    monkeypatch.setenv("CF_RERANK_DAILY_BUDGET", "1")
+    monkeypatch.setenv("CF_EVAL_DAILY_BUDGET", "1")
+    monkeypatch.setenv("CF_USAGE_SCOPE", "eval")
+    lane = ratelimit.lane_embeddings()
+    assert lane == ratelimit.LANE_EVAL_CLOUDFLARE
+    assert ratelimit.lane_rerank() == ratelimit.LANE_EVAL_CLOUDFLARE
+    ratelimit.anotar_llamada_cf(lane)
+    assert not ratelimit.puede_llamar_cf(lane)
+    assert ratelimit.puede_llamar_cloudflare()
+    assert ratelimit.puede_llamar_rerank()
+    assert any(k.startswith("eval:cloudflare:budget:") for k in ratelimit._budget)
 
 
 def test_circuito_de_cloudflare_no_pisa_jina():
@@ -205,6 +231,18 @@ def test_circuito_de_cloudflare_no_pisa_jina():
     assert ratelimit.cloudflare_en_pausa()
     assert ratelimit.cloudflare_origen_circuito() == "status_5xx"
     assert ratelimit.jina_origen_circuito() == "status_429"
+    assert not ratelimit.rerank_en_pausa()
+
+
+def test_circuito_de_rerank_no_pisa_embeddings():
+    ratelimit.anotar_fallo_rerank("timeout")
+    assert not ratelimit.rerank_en_pausa()
+    assert ratelimit.rerank_origen_circuito() == "timeout"
+    assert not ratelimit.cloudflare_en_pausa()
+
+    ratelimit.anotar_fallo_rerank("status_5xx")
+    assert ratelimit.rerank_en_pausa()
+    assert not ratelimit.cloudflare_en_pausa()
 
 
 def test_origen_de_cloudflare_persiste_en_redis(monkeypatch):
@@ -229,15 +267,15 @@ def test_origen_de_cloudflare_persiste_en_redis(monkeypatch):
     assert ratelimit._JINA_LAST_ERROR_KEY not in store
 
     # Otra instancia no tiene el origen en memoria: lo lee de Redis.
-    ratelimit._cloudflare_origen = None
+    ratelimit._cf_lane(ratelimit.LANE_CLOUDFLARE).origen = None
     assert ratelimit.cloudflare_origen_circuito() == "timeout"
 
     ratelimit.anotar_fallo_cloudflare("timeout")
     assert ratelimit.cloudflare_en_pausa()
     assert store.get(ratelimit._CLOUDFLARE_CIRCUIT_KEY) == "timeout"
 
-    ratelimit._cloudflare_pause_until = 0.0
-    ratelimit._cloudflare_origen = None
+    ratelimit._cf_lane(ratelimit.LANE_CLOUDFLARE).pause_until = 0.0
+    ratelimit._cf_lane(ratelimit.LANE_CLOUDFLARE).origen = None
     assert ratelimit.cloudflare_en_pausa()
     assert ratelimit.cloudflare_origen_circuito() == "timeout"
 

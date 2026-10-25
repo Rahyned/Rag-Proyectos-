@@ -102,7 +102,9 @@ def _cliente(handler) -> httpx.Client:
 def _configurar_cloudflare(monkeypatch, budget: str = "0") -> None:
     monkeypatch.setenv("CF_ACCOUNT_ID", "cuenta-test")
     monkeypatch.setenv("CF_API_TOKEN", "cf-test-token")
-    monkeypatch.setenv("CF_DAILY_BUDGET", budget)
+    # Cupo propio del reranker; embeddings de prod no se tocan.
+    monkeypatch.setenv("CF_RERANK_DAILY_BUDGET", budget)
+    monkeypatch.setenv("CF_DAILY_BUDGET", "0")
 
 
 def _respuesta(scores: list[float]) -> httpx.Response:
@@ -320,12 +322,13 @@ def test_empate_conserva_el_orden_del_rrf(monkeypatch):
     ]
 
 
-def test_la_llamada_consume_el_cupo_de_cloudflare(monkeypatch):
+def test_la_llamada_consume_el_cupo_de_rerank(monkeypatch):
     _configurar_cloudflare(monkeypatch, budget="1")
     reranker = CloudflareReranker(client=_cliente(lambda _r: _respuesta([1, 0, 0])))
     hits = [{"chunk_id": chunk_id, "text": texto} for chunk_id, texto in FILAS]
     reranker.reordenar(QUERY, hits)
-    assert not ratelimit.puede_llamar_cloudflare()
+    assert not ratelimit.puede_llamar_rerank()
+    assert ratelimit.puede_llamar_cloudflare()
 
 
 def test_el_cache_evita_repetir_la_llamada(monkeypatch):
@@ -346,7 +349,7 @@ def test_el_cache_evita_repetir_la_llamada(monkeypatch):
         hit["chunk_id"] for hit in segunda
     ]
     # Queda 1 de los 2 del cupo: la segunda salió del cache.
-    assert ratelimit.puede_llamar_cloudflare()
+    assert ratelimit.puede_llamar_rerank()
 
 
 def test_el_cache_responde_aunque_el_cupo_este_agotado(monkeypatch):
@@ -360,7 +363,7 @@ def test_el_cache_responde_aunque_el_cupo_este_agotado(monkeypatch):
     hits = [{"chunk_id": chunk_id, "text": texto} for chunk_id, texto in FILAS]
     reranker = CloudflareReranker(client=_cliente(handler))
     primera = reranker.reordenar(QUERY, hits)
-    assert not ratelimit.puede_llamar_cloudflare()
+    assert not ratelimit.puede_llamar_rerank()
 
     segunda = reranker.reordenar(QUERY, hits)
 
@@ -372,7 +375,7 @@ def test_el_cache_responde_aunque_el_cupo_este_agotado(monkeypatch):
 
 def test_presupuesto_agotado_no_llama(monkeypatch):
     _configurar_cloudflare(monkeypatch, budget="1")
-    ratelimit.anotar_llamada_cloudflare()
+    ratelimit.anotar_llamada_rerank()
     llamadas = []
 
     def handler(_request):
@@ -407,8 +410,9 @@ def test_timeout_no_gasta_cupo(monkeypatch):
     hits = [{"chunk_id": chunk_id, "text": texto} for chunk_id, texto in FILAS]
     with pytest.raises(RerankError, match="timeout"):
         CloudflareReranker(client=_cliente(timeout)).reordenar(QUERY, hits)
-    assert ratelimit.puede_llamar_cloudflare()
-    assert ratelimit.cloudflare_origen_circuito() == "timeout"
+    assert ratelimit.puede_llamar_rerank()
+    assert ratelimit.rerank_origen_circuito() == "timeout"
+    assert not ratelimit.cloudflare_en_pausa()
 
 
 def test_respuesta_lenta_se_descarta(monkeypatch):
@@ -421,7 +425,8 @@ def test_respuesta_lenta_se_descarta(monkeypatch):
     with pytest.raises(RerankError, match="timeout"):
         reranker.reordenar(QUERY, hits)
     # La llamada salió y respondió: el cupo se descuenta igual.
-    assert not ratelimit.puede_llamar_cloudflare()
+    assert not ratelimit.puede_llamar_rerank()
+    assert ratelimit.puede_llamar_cloudflare()
 
 
 @pytest.mark.parametrize("code, motivo", [(503, "http_error"), (429, "cuota")])
@@ -434,10 +439,11 @@ def test_errores_http_no_reordenan(monkeypatch, code, motivo):
     hits = [{"chunk_id": chunk_id, "text": texto} for chunk_id, texto in FILAS]
     with pytest.raises(RerankError, match=motivo):
         CloudflareReranker(client=_cliente(error)).reordenar(QUERY, hits)
-    assert ratelimit.puede_llamar_cloudflare()
+    assert ratelimit.puede_llamar_rerank()
     if code == 429:
-        assert ratelimit.cloudflare_en_pausa()
-        assert ratelimit.cloudflare_origen_circuito() == "status_429"
+        assert ratelimit.rerank_en_pausa()
+        assert ratelimit.rerank_origen_circuito() == "status_429"
+        assert not ratelimit.cloudflare_en_pausa()
 
 
 def test_respuesta_incompleta_es_error(monkeypatch):
@@ -474,7 +480,7 @@ def test_busqueda_cae_al_rrf_con_el_cupo_agotado(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv("RERANK_ENABLED", "1")
     esperado = _baseline(tmp_path, monkeypatch)
     _configurar_cloudflare(monkeypatch, budget="1")
-    ratelimit.anotar_llamada_cloudflare()
+    ratelimit.anotar_llamada_rerank()
     llamadas = []
 
     def handler(_request):

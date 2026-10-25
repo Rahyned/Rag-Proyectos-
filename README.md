@@ -25,8 +25,8 @@ FastAPI + SSE · FAISS · BM25 · Cloudflare Workers AI · Groq · Upstash Redis
 
 ## Calidad
 
-- 151 tests con pytest y un set de evaluación de 44 preguntas en español.
-- En ese set, la búsqueda híbrida acierta 38/44 en el top 3 y 43/44 en el top 5 (BM25 solo: 36/44 y 38/44).
+- Suite pytest + gold de test (100 preguntas en español; 44 marcadas `v1`).
+- Cupos Cloudflare separados: embeddings (`CF_DAILY_BUDGET`), reranker (`CF_RERANK_DAILY_BUDGET`) y eval (`CF_EVAL_DAILY_BUDGET`).
 - El CI corre tests, lint y build. La ingesta bloquea documentos con claves, tokens, CUIT/CUIL o emails no autorizados.
 
 ## Cómo correrlo
@@ -38,11 +38,19 @@ cd client && npm install && npm run dev  # UI en :5173
 uv run pytest
 ```
 
+Eval del gold (cupo propio, no gasta producción):
+
+```bash
+uv run python scripts/eval_gold.py
+uv run python scripts/eval_gold.py --rerank
+uv run python scripts/eval_gold.py --solo-top10   # implica --rerank, solo top_n=10
+```
+
 Las variables de entorno están documentadas en `.env.example`. Para sumar un proyecto, se agregan sus documentos a `corpus/<proyecto>/`, se registra en `corpus/manifiesto.json` y se reindexa con `scripts/ingest.py`.
 
 ## Estado
 
-En producción (fases 0–11 completadas). Próximas mejoras: reranker, ajuste del peso semántico y más preguntas de evaluación.
+En producción (fases 0–11 completadas). Reranker opcional (`RERANK_ENABLED`); pendiente calibrar pesos y medir el gold completo con Cloudflare.
 
 ## Autor
 
