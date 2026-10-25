@@ -15,7 +15,8 @@ import pytest
 
 from app import ratelimit
 from rag import rerank as rerank_mod
-from rag.config import CF_RERANK_URL
+from rag.config import (CF_RERANK_URL, rag_rerank, rag_rerank_weight,
+                        rerank_enabled)
 from rag.hybrid import HybridRetriever
 from rag.rerank import CloudflareReranker, RerankError
 
@@ -25,6 +26,35 @@ FILAS = [
     ("stella:p3:2", "restaurar un backup de la base de datos"),
 ]
 QUERY = "agregar un cliente nuevo en el laboratorio"
+
+
+@pytest.mark.parametrize(
+    "env, esperado",
+    [
+        ({}, "off"),
+        ({"RAG_RERANK": "off"}, "off"),
+        ({"RAG_RERANK": "fuse"}, "fuse"),
+        ({"RAG_RERANK": "replace"}, "replace"),
+        ({"RAG_RERANK": "raro"}, "off"),
+        ({"RERANK_ENABLED": "1"}, "fuse"),
+        ({"RERANK_ENABLED": "1", "RERANK_MODE": "replace"}, "replace"),
+        ({"RAG_RERANK": "off", "RERANK_ENABLED": "1"}, "off"),
+    ],
+)
+def test_rag_rerank_default_off(monkeypatch, env, esperado):
+    for key, valor in env.items():
+        monkeypatch.setenv(key, valor)
+    assert rag_rerank() == esperado
+    assert rerank_enabled() is (esperado != "off")
+
+
+def test_rag_rerank_weight(monkeypatch):
+    assert rag_rerank_weight() == 0.5
+    monkeypatch.setenv("RAG_RERANK_WEIGHT", "0.7")
+    assert rag_rerank_weight() == 0.7
+    monkeypatch.delenv("RAG_RERANK_WEIGHT", raising=False)
+    monkeypatch.setenv("RERANK_WEIGHT", "0.3")
+    assert rag_rerank_weight() == 0.3
 
 
 class EmbedderFijo:
@@ -102,7 +132,9 @@ def _cliente(handler) -> httpx.Client:
 def _configurar_cloudflare(monkeypatch, budget: str = "0") -> None:
     monkeypatch.setenv("CF_ACCOUNT_ID", "cuenta-test")
     monkeypatch.setenv("CF_API_TOKEN", "cf-test-token")
-    monkeypatch.setenv("CF_DAILY_BUDGET", budget)
+    # Cupo propio del reranker; embeddings de prod no se tocan.
+    monkeypatch.setenv("CF_RERANK_DAILY_BUDGET", budget)
+    monkeypatch.setenv("CF_DAILY_BUDGET", "0")
 
 
 def _respuesta(scores: list[float]) -> httpx.Response:
@@ -211,21 +243,21 @@ def test_fuse_respeta_keep(tmp_path, monkeypatch):
 def test_modo_y_peso_del_entorno(monkeypatch):
     from rag import config as rag_config
 
-    monkeypatch.delenv("RERANK_MODE", raising=False)
-    monkeypatch.delenv("RERANK_WEIGHT", raising=False)
+    assert rag_config.rag_rerank() == "off"
     assert rag_config.rerank_mode() == "fuse"
     assert rag_config.rerank_weight() == 0.5
 
-    monkeypatch.setenv("RERANK_MODE", "replace")
+    monkeypatch.setenv("RAG_RERANK", "replace")
     assert rag_config.rerank_mode() == "replace"
-    monkeypatch.setenv("RERANK_MODE", "cualquier-cosa")
+    monkeypatch.setenv("RAG_RERANK", "raro")
+    assert rag_config.rag_rerank() == "off"
     assert rag_config.rerank_mode() == "fuse"
 
     for valor in ("0", "0.3", "1"):
-        monkeypatch.setenv("RERANK_WEIGHT", valor)
+        monkeypatch.setenv("RAG_RERANK_WEIGHT", valor)
         assert rag_config.rerank_weight() == float(valor)
     for valor in ("-0.1", "1.1", "no-es-numero"):
-        monkeypatch.setenv("RERANK_WEIGHT", valor)
+        monkeypatch.setenv("RAG_RERANK_WEIGHT", valor)
         assert rag_config.rerank_weight() == 0.5
 
 
@@ -320,12 +352,13 @@ def test_empate_conserva_el_orden_del_rrf(monkeypatch):
     ]
 
 
-def test_la_llamada_consume_el_cupo_de_cloudflare(monkeypatch):
+def test_la_llamada_consume_el_cupo_de_rerank(monkeypatch):
     _configurar_cloudflare(monkeypatch, budget="1")
     reranker = CloudflareReranker(client=_cliente(lambda _r: _respuesta([1, 0, 0])))
     hits = [{"chunk_id": chunk_id, "text": texto} for chunk_id, texto in FILAS]
     reranker.reordenar(QUERY, hits)
-    assert not ratelimit.puede_llamar_cloudflare()
+    assert not ratelimit.puede_llamar_rerank()
+    assert ratelimit.puede_llamar_cloudflare()
 
 
 def test_el_cache_evita_repetir_la_llamada(monkeypatch):
@@ -346,7 +379,7 @@ def test_el_cache_evita_repetir_la_llamada(monkeypatch):
         hit["chunk_id"] for hit in segunda
     ]
     # Queda 1 de los 2 del cupo: la segunda salió del cache.
-    assert ratelimit.puede_llamar_cloudflare()
+    assert ratelimit.puede_llamar_rerank()
 
 
 def test_el_cache_responde_aunque_el_cupo_este_agotado(monkeypatch):
@@ -360,7 +393,7 @@ def test_el_cache_responde_aunque_el_cupo_este_agotado(monkeypatch):
     hits = [{"chunk_id": chunk_id, "text": texto} for chunk_id, texto in FILAS]
     reranker = CloudflareReranker(client=_cliente(handler))
     primera = reranker.reordenar(QUERY, hits)
-    assert not ratelimit.puede_llamar_cloudflare()
+    assert not ratelimit.puede_llamar_rerank()
 
     segunda = reranker.reordenar(QUERY, hits)
 
@@ -372,7 +405,7 @@ def test_el_cache_responde_aunque_el_cupo_este_agotado(monkeypatch):
 
 def test_presupuesto_agotado_no_llama(monkeypatch):
     _configurar_cloudflare(monkeypatch, budget="1")
-    ratelimit.anotar_llamada_cloudflare()
+    ratelimit.anotar_llamada_rerank()
     llamadas = []
 
     def handler(_request):
@@ -407,8 +440,9 @@ def test_timeout_no_gasta_cupo(monkeypatch):
     hits = [{"chunk_id": chunk_id, "text": texto} for chunk_id, texto in FILAS]
     with pytest.raises(RerankError, match="timeout"):
         CloudflareReranker(client=_cliente(timeout)).reordenar(QUERY, hits)
-    assert ratelimit.puede_llamar_cloudflare()
-    assert ratelimit.cloudflare_origen_circuito() == "timeout"
+    assert ratelimit.puede_llamar_rerank()
+    assert ratelimit.rerank_origen_circuito() == "timeout"
+    assert not ratelimit.cloudflare_en_pausa()
 
 
 def test_respuesta_lenta_se_descarta(monkeypatch):
@@ -421,7 +455,8 @@ def test_respuesta_lenta_se_descarta(monkeypatch):
     with pytest.raises(RerankError, match="timeout"):
         reranker.reordenar(QUERY, hits)
     # La llamada salió y respondió: el cupo se descuenta igual.
-    assert not ratelimit.puede_llamar_cloudflare()
+    assert not ratelimit.puede_llamar_rerank()
+    assert ratelimit.puede_llamar_cloudflare()
 
 
 @pytest.mark.parametrize("code, motivo", [(503, "http_error"), (429, "cuota")])
@@ -434,10 +469,11 @@ def test_errores_http_no_reordenan(monkeypatch, code, motivo):
     hits = [{"chunk_id": chunk_id, "text": texto} for chunk_id, texto in FILAS]
     with pytest.raises(RerankError, match=motivo):
         CloudflareReranker(client=_cliente(error)).reordenar(QUERY, hits)
-    assert ratelimit.puede_llamar_cloudflare()
+    assert ratelimit.puede_llamar_rerank()
     if code == 429:
-        assert ratelimit.cloudflare_en_pausa()
-        assert ratelimit.cloudflare_origen_circuito() == "status_429"
+        assert ratelimit.rerank_en_pausa()
+        assert ratelimit.rerank_origen_circuito() == "status_429"
+        assert not ratelimit.cloudflare_en_pausa()
 
 
 def test_respuesta_incompleta_es_error(monkeypatch):
@@ -474,7 +510,7 @@ def test_busqueda_cae_al_rrf_con_el_cupo_agotado(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv("RERANK_ENABLED", "1")
     esperado = _baseline(tmp_path, monkeypatch)
     _configurar_cloudflare(monkeypatch, budget="1")
-    ratelimit.anotar_llamada_cloudflare()
+    ratelimit.anotar_llamada_rerank()
     llamadas = []
 
     def handler(_request):

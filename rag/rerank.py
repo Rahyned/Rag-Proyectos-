@@ -1,11 +1,12 @@
 """Reranker de Cloudflare Workers AI (`@cf/baai/bge-reranker-base`).
 
 Reordena los candidatos que devuelve la búsqueda híbrida. Comparte las
-credenciales, el cupo diario (`CF_DAILY_BUDGET`) y el circuito de los
-embeddings de Cloudflare: es la misma API y no puede gastar de más. Si falta
-la key, el cupo está agotado, el circuito está abierto, la API falla o tarda
-más de `RERANK_TIMEOUT`, `RerankError` lleva solo el motivo y el retriever
-sigue con el orden del RRF.
+credenciales (`CF_ACCOUNT_ID`, `CF_API_TOKEN`) con los embeddings, pero
+tiene cupo (`CF_RERANK_DAILY_BUDGET`, claves `rerank:*`) y circuito
+propios. En la eval (`CF_USAGE_SCOPE=eval`) usa `eval:cloudflare:*` y
+`CF_EVAL_DAILY_BUDGET`. Si falta la key, el cupo está agotado, el circuito
+está abierto, la API falla o tarda más de `RERANK_TIMEOUT`, `RerankError`
+lleva solo el motivo y el retriever sigue con el orden del RRF.
 
 En modo `fuse` el orden del reranker se recombina con el del RRF
 (`fusionar_rrf`): el orden léxico y el semántico se compensan en vez de que
@@ -165,9 +166,10 @@ class CloudflareReranker:
         token = app_config.cf_api_token()
         if not account or not token:
             raise RerankError("sin_key")
-        if ratelimit.cloudflare_en_pausa():
+        lane = ratelimit.lane_rerank()
+        if ratelimit.cf_en_pausa(lane):
             raise RerankError("circuito")
-        if not ratelimit.puede_llamar_cloudflare():
+        if not ratelimit.puede_llamar_cf(lane):
             raise RerankError("presupuesto")
         url = CF_RERANK_URL.format(account_id=account)
         contexts = [
@@ -188,7 +190,7 @@ class CloudflareReranker:
             raise
         except httpx.TimeoutException:
             _loguear_fallo("timeout", inicio)
-            ratelimit.anotar_fallo_cloudflare("timeout")
+            ratelimit.anotar_fallo_cf(lane, "timeout")
             raise RerankError("timeout") from None
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
@@ -203,7 +205,7 @@ class CloudflareReranker:
                 motivo = f"{motivo} {detalle}"
             _loguear_fallo(motivo, inicio)
             if origen:
-                ratelimit.anotar_fallo_cloudflare(origen)
+                ratelimit.anotar_fallo_cf(lane, origen)
             if code in (402, 429):
                 raise RerankError("cuota") from None
             raise RerankError("http_error") from None
@@ -215,7 +217,7 @@ class CloudflareReranker:
         puntajes = _puntajes(cuerpo, len(hits))
         # La llamada ya salió: cuenta contra el cupo aunque después se
         # descarte por lenta. Nunca se gasta más de lo reservado.
-        ratelimit.anotar_llamada_cloudflare()
+        ratelimit.anotar_llamada_cf(lane)
         if _ahora() - inicio > self.timeout:
             _loguear_fallo("timeout", inicio)
             raise RerankError("timeout")

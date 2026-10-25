@@ -1,5 +1,101 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-25 — feat/rag-rerank-off-por-defecto
+
+### Added
+
+- `RAG_RERANK` (`off` | `fuse` | `replace`, default `off`) y
+  `RAG_RERANK_WEIGHT` (default 0.5). Con `off` no se llama a Cloudflare
+  para rerank: queda el orden RRF.
+- `/api/health` expone el modo activo en `rerank`.
+- Tests de config, health y de que `eval_gold --rerank` pisa `RAG_RERANK`.
+
+### Changed
+
+- La eval configura `RAG_RERANK` / `RAG_RERANK_WEIGHT` al medir; sigue
+  comparando todas las configs aunque producción tenga `off`.
+- `.env.example` y README documentan las nuevas variables (reemplazan
+  `RERANK_ENABLED` / `RERANK_MODE` / `RERANK_WEIGHT` en la config de
+  ejemplo; esas quedan solo como compat).
+
+### Files
+
+- `rag/config.py`
+- `app/main.py`
+- `scripts/eval_gold.py`
+- `tests/conftest.py`
+- `tests/test_health.py`
+- `tests/test_rerank.py`
+- `tests/test_eval_gold.py`
+- `.env.example`
+- `README.md`
+- `CHANGELOG.md`
+
+### Tests
+
+`216 passed, 1 skipped`.
+
+## 2026-10-25 — feat/cupos-cloudflare-separados
+
+### Added
+
+- Cupo y circuito propios de la eval: `CF_EVAL_DAILY_BUDGET` (default 1500),
+  claves `eval:cloudflare:*`, con `CF_USAGE_SCOPE=eval` en
+  `scripts/eval_gold.py`.
+- Cupo y circuito propios del reranker en producción:
+  `CF_RERANK_DAILY_BUDGET` (default 300), claves `rerank:*`. Si se agota,
+  la búsqueda cae al orden RRF.
+- `--solo-top10` en `scripts/eval_gold.py` (implica `--rerank`, solo
+  `top_n=10`) y estimación de llamadas Cloudflare al inicio.
+- Tests sin red: independencia embed↔rerank↔eval, flags y estimación.
+
+### Changed
+
+- Embeddings de producción siguen en `cloudflare:*` / `CF_DAILY_BUDGET`.
+- README y `.env.example` documentan los tres cupos.
+
+### Files
+
+- `app/config.py`
+- `app/ratelimit.py`
+- `rag/embeddings.py`
+- `rag/rerank.py`
+- `scripts/eval_gold.py`
+- `tests/conftest.py`
+- `tests/test_eval_gold.py`
+- `tests/test_ratelimit.py`
+- `tests/test_rerank.py`
+- `.env.example`
+- `README.md`
+- `CHANGELOG.md`
+
+### Tests
+
+`205 passed, 1 skipped`.
+
+## 2026-10-25 — fix/eval-gold-cloudflare-default
+
+### Added
+
+- Test del default de `EMBEDDINGS_PROVIDER` en `scripts/eval_gold.py`
+  (Cloudflare, Jina, `off`, y CF incompleto).
+
+### Changed
+
+- Sin `EMBEDDINGS_PROVIDER` explícito, `eval_gold.py` elige `cloudflare`
+  si hay `CF_ACCOUNT_ID` y `CF_API_TOKEN`; si no, `api` con `JINA_API_KEY`;
+  si no hay ninguna, `off`.
+
+### Files
+
+- `scripts/eval_gold.py`
+- `tests/test_eval_gold.py`
+- `CHANGELOG.md`
+
+### Tests
+
+`189 passed, 1 skipped`.
+
 ## 2026-10-24 — feat/mejora-docs-chunks
 
 ### Added

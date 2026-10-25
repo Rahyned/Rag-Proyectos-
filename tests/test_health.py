@@ -14,10 +14,20 @@ def test_health():
     assert isinstance(data["llm"], bool)
     assert data["model"]
     assert isinstance(data["dense"], bool)
+    assert data["rerank"] == "off"
     assert data["dense_error"] is None or isinstance(data["dense_error"], str)
     assert data["dense_error_origen"] is None or isinstance(
         data["dense_error_origen"], str
     )
+
+
+def test_health_muestra_el_modo_de_rerank(monkeypatch):
+    monkeypatch.setenv("RAG_RERANK", "fuse")
+    assert client.get("/api/health").json()["rerank"] == "fuse"
+    monkeypatch.setenv("RAG_RERANK", "replace")
+    assert client.get("/api/health").json()["rerank"] == "replace"
+    monkeypatch.setenv("RAG_RERANK", "off")
+    assert client.get("/api/health").json()["rerank"] == "off"
 
 
 def test_health_expone_el_origen_del_circuito(monkeypatch):

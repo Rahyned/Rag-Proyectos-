@@ -57,7 +57,7 @@ def cf_api_token() -> str:
 
 
 def cf_daily_budget() -> int:
-    """Llamadas a Cloudflare por día UTC. 0 = ilimitado; vacío = 300."""
+    """Llamadas de embeddings Cloudflare por día UTC. 0 = ilimitado; vacío = 300."""
     raw = os.getenv("CF_DAILY_BUDGET", "300").strip()
     if not raw:
         return 300
@@ -66,6 +66,30 @@ def cf_daily_budget() -> int:
     except ValueError:
         return 300
     return value if value >= 0 else 300
+
+
+def cf_rerank_daily_budget() -> int:
+    """Llamadas del reranker Cloudflare por día UTC. 0 = ilimitado; vacío = 300."""
+    raw = os.getenv("CF_RERANK_DAILY_BUDGET", "300").strip()
+    if not raw:
+        return 300
+    try:
+        value = int(raw)
+    except ValueError:
+        return 300
+    return value if value >= 0 else 300
+
+
+def cf_eval_daily_budget() -> int:
+    """Llamadas Cloudflare de la eval por día UTC. 0 = ilimitado; vacío = 1500."""
+    raw = os.getenv("CF_EVAL_DAILY_BUDGET", "1500").strip()
+    if not raw:
+        return 1500
+    try:
+        value = int(raw)
+    except ValueError:
+        return 1500
+    return value if value >= 0 else 1500
 
 
 def jina_api_key() -> str:

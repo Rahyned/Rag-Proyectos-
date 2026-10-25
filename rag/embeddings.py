@@ -5,7 +5,8 @@
 API responde 4xx/5xx o tarda más de 2 s, `EmbedError` lleva solo el motivo:
 el retriever cae a BM25. Un 429 abre la pausa enseguida; un timeout o un 5xx
 recién a los 2 fallos en 60 s. El cupo diario solo baja cuando la llamada
-responde OK. Jina y Cloudflare tienen cupo y circuito separados.
+responde OK. Jina, embeddings Cloudflare y el reranker tienen cupo y
+circuito separados; la eval usa `eval:cloudflare:*`.
 """
 
 import json
@@ -211,7 +212,9 @@ class CloudflareEmbeddings:
     """Embeddings de Workers AI. La ingesta va en lotes de 20.
 
     El cache y el cupo aplican a consultas, no al lote de ingesta. El
-    circuito y el presupuesto son propios (`cloudflare:*`), separados de Jina.
+    circuito y el presupuesto son `cloudflare:*` en producción y
+    `eval:cloudflare:*` con `CF_USAGE_SCOPE=eval`, separados de Jina y del
+    reranker.
     """
 
     MODEL = CF_EMBED_MODEL
@@ -246,13 +249,14 @@ class CloudflareEmbeddings:
                 return guardado.reshape(1, -1).copy()
         if not app_config.cf_account_id() or not app_config.cf_api_token():
             raise EmbedError("sin_key")
-        if ratelimit.cloudflare_en_pausa():
+        lane = ratelimit.lane_embeddings()
+        if ratelimit.cf_en_pausa(lane):
             raise EmbedError("circuito")
-        if not ratelimit.puede_llamar_cloudflare():
+        if not ratelimit.puede_llamar_cf(lane):
             raise EmbedError("presupuesto")
         # Sin reintento: si Cloudflare tarda o falla, se responde por BM25 ya.
         matriz = self._pedir([texto], EMBED_TIMEOUT)
-        ratelimit.anotar_llamada_cloudflare()
+        ratelimit.anotar_llamada_cf(lane)
         with self._lock:
             self._cache[texto] = matriz[0].copy()
             self._cache.move_to_end(texto)
@@ -293,7 +297,7 @@ class CloudflareEmbeddings:
             raise
         except httpx.TimeoutException:
             _loguear_fallo("cloudflare", "timeout", inicio)
-            ratelimit.anotar_fallo_cloudflare("timeout")
+            ratelimit.anotar_fallo_cf(ratelimit.lane_embeddings(), "timeout")
             raise EmbedError("timeout") from None
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
@@ -308,7 +312,7 @@ class CloudflareEmbeddings:
                 motivo = f"{motivo} {detalle}"
             _loguear_fallo("cloudflare", motivo, inicio)
             if origen:
-                ratelimit.anotar_fallo_cloudflare(origen)
+                ratelimit.anotar_fallo_cf(ratelimit.lane_embeddings(), origen)
             if code in (402, 429):
                 raise EmbedError("cuota") from None
             raise EmbedError("http_error") from None
