@@ -2,17 +2,25 @@
 
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 from scripts.eval_gold import (
+    Flags,
+    RRF_KS,
+    RRF_WEIGHTS,
+    _cache_canales,
     _comparar_reranker,
     _configurar_rerank,
+    _formato_esperado,
+    _hit_counts,
     default_embeddings_provider,
     estimar_llamadas_cloudflare,
     flags_cli,
     top_ns_rerank,
 )
 from rag.config import rag_rerank, rag_rerank_weight
+from rag.hybrid import rrf
 
 
 @pytest.mark.parametrize(
@@ -47,17 +55,20 @@ def test_top_ns_rerank():
 
 
 @pytest.mark.parametrize(
-    "argv, rerank, solo",
+    "argv, esperado",
     [
-        ([], False, False),
-        (["--rerank"], True, False),
-        (["--solo-top10"], True, True),
-        (["--rerank", "--solo-top10"], True, True),
-        (["--solo-rerank-top10"], True, True),
+        ([], Flags()),
+        (["--rerank"], Flags(rerank=True)),
+        (["--solo-top10"], Flags(rerank=True, solo_top10=True)),
+        (["--rerank", "--solo-top10"], Flags(rerank=True, solo_top10=True)),
+        (["--solo-rerank-top10"], Flags(rerank=True, solo_top10=True)),
+        (["--fallos"], Flags(fallos=True)),
+        (["--rrf-grid"], Flags(rrf_grid=True)),
+        (["--fallos", "--rrf-grid"], Flags(fallos=True, rrf_grid=True)),
     ],
 )
-def test_flags_cli(argv, rerank, solo):
-    assert flags_cli(argv) == (rerank, solo)
+def test_flags_cli(argv, esperado):
+    assert flags_cli(argv) == esperado
 
 
 @pytest.mark.parametrize(
@@ -148,3 +159,112 @@ def test_configurar_rerank_pisa_rag_rerank_del_entorno(monkeypatch):
     assert rag_rerank() == "replace"
     _configurar_rerank(enabled=False)
     assert rag_rerank() == "off"
+
+
+def test_formato_esperado_pagina_y_seccion():
+    assert "pág. 3" in _formato_esperado({
+        "doc_id": "manual", "page": 3, "proyecto": "stella",
+    })
+    assert "Intro" in _formato_esperado({
+        "doc_id": "web", "section": "Intro", "proyecto": "portafolio-web",
+    })
+    assert "A" in _formato_esperado({
+        "proyecto": "todos",
+        "acepta": [
+            {"doc_id": "a", "section": "A"},
+            {"doc_id": "b", "page": 2},
+        ],
+    })
+
+
+def test_acierto_todos_acepta_cualquiera_de_las_specs():
+    """Con `acepta`, basta un esperado en el top-k (OR, no AND)."""
+    from tests.test_gold import _acierto
+
+    entry = {
+        "q": "¿cómo encargo un trabajo?",
+        "proyecto": "todos",
+        "acepta": [
+            {"doc_id": "portafolio-web", "section": "¿Qué es esta página?"},
+            {"doc_id": "portafolio-web", "section": "¿Cómo hago un pedido?"},
+            {"doc_id": "laboratorio-riodent", "section": "Orden de trabajo"},
+            {"doc_id": "solutionscars", "section": "¿Cómo hago un pedido?"},
+        ],
+    }
+    # Ningún acepta en el top 3 → fallo (caso RRF puro del gold).
+    misses = [
+        {"doc_id": "laboratorio-riodent",
+         "seccion": "Lab › ¿Cómo hago un pedido?"},
+        {"doc_id": "portafolio-web",
+         "seccion": "web › Pedir un trabajo"},
+        {"doc_id": "stella", "seccion": "1.7 El flujo completo"},
+    ]
+    assert not _acierto(misses, entry, k=3)
+    # Prefijo de sección: «Orden de trabajo digital…» cubre «Orden de trabajo».
+    hits = [
+        {"doc_id": "stella", "seccion": "otro"},
+        {"doc_id": "laboratorio-riodent",
+         "seccion": "Lab › Orden de trabajo digital de Laboratorio RioDent"},
+        {"doc_id": "stella", "seccion": "otro2"},
+    ]
+    assert _acierto(hits, entry, k=3)
+    # Cualquiera de las specs de portafolio alcanza.
+    assert _acierto(
+        [{"doc_id": "portafolio-web",
+          "seccion": "x › ¿Cómo hago un pedido?"}],
+        entry, k=3,
+    )
+
+
+def test_rrf_con_peso_lexico_mayor_prioriza_bm25():
+    dense = np.array([0.9, 0.1], dtype=np.float32)
+    lex = np.array([0.1, 0.9], dtype=np.float32)
+    assert rrf(dense, lex, w_lex=1.0, w_dense=1.0).argmax() in (0, 1)
+    assert rrf(dense, lex, w_lex=3.0, w_dense=1.0).argmax() == 1
+    assert rrf(dense, lex, w_lex=1.0, w_dense=3.0).argmax() == 0
+
+
+def test_rrf_grid_constantes():
+    assert RRF_WEIGHTS == ((1.0, 1.0), (1.5, 1.0), (2.0, 1.0), (3.0, 1.0))
+    assert RRF_KS == (30, 60, 100)
+
+
+def test_cache_canales_una_llamada_por_pregunta():
+    retriever = MagicMock()
+    retriever.scores_canales.side_effect = [
+        (np.ones(2), np.ones(2), np.array([True, True])),
+        (np.ones(2), np.ones(2), np.array([True, True])),
+    ]
+    entries = [
+        {"q": "hola", "proyecto": "stella"},
+        {"q": "hola", "proyecto": "stella"},
+        {"q": "chau", "proyecto": "stella"},
+    ]
+    cache = _cache_canales(retriever, entries)
+    assert retriever.scores_canales.call_count == 2
+    assert len(cache) == 2
+
+
+def test_hit_counts_usa_hits_rrf_sin_reembeber():
+    retriever = MagicMock()
+    retriever.hits_rrf.return_value = [
+        {"chunk_id": "a", "doc_id": "d", "seccion": "S", "page": 1},
+    ]
+    lex = np.array([1.0, 0.0], dtype=np.float32)
+    dense = np.array([0.5, 0.5], dtype=np.float32)
+    allowed = np.array([True, True])
+    cache = {("q", "stella"): (lex, dense, allowed)}
+    entries = [{
+        "q": "q", "proyecto": "stella", "doc_id": "d", "section": "S",
+    }]
+    with patch("scripts.eval_gold._acierto", return_value=True):
+        n, h3, h5 = _hit_counts(
+            retriever, entries, cache, k_rrf=60, w_lex=2.0, w_dense=1.0,
+        )
+    assert (n, h3, h5) == (1, 1, 1)
+    retriever.hits_rrf.assert_called_once()
+    kwargs = retriever.hits_rrf.call_args.kwargs
+    assert kwargs["k"] == 60
+    assert kwargs["w_lex"] == 2.0
+    assert kwargs["w_dense"] == 1.0
+    retriever.scores_canales.assert_not_called()

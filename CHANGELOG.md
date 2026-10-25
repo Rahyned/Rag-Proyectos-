@@ -1,5 +1,57 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-25 — fix/gate-nombres-otro-proyecto
+
+### Fixed
+
+- El umbral BM25 de `search()` solo ignora nombres de documentos **del
+  recorte actual**. Antes, «RioDent» / «sistemas» matcheaban docs de otros
+  proyectos, vaciaban el umbral y `search()` devolvía `[]` sin llegar al
+  RRF — de ahí 97/100 en la eval híbrida frente a 99/100 del `--rrf-grid`.
+- `_hit_cubre` acepta prefijo del último tramo de sección («Orden de
+  trabajo» cubre «Orden de trabajo digital…»).
+- `--fallos` imprime el top de `search()` (prod) además del RRF sin gate.
+
+### Files
+
+- `rag/hybrid.py`
+- `scripts/eval_gold.py`
+- `tests/test_gold.py`
+- `tests/test_retriever.py`
+- `tests/test_eval_gold.py`
+- `CHANGELOG.md`
+
+### Tests
+
+`227 passed, 1 skipped`.
+
+## 2026-10-25 — feat/eval-fallos-rrf-grid
+
+### Added
+
+- `scripts/eval_gold.py --fallos`: para cada positiva del gold de test donde
+  la híbrida falla en top 3, imprime pregunta, esperado, top 5 BM25 / denso
+  / RRF (rank + score).
+- `scripts/eval_gold.py --rrf-grid`: grilla BM25:denso (1:1, 1.5:1, 2:1,
+  3:1) × k (30, 60, 100) con hit@3/5 en tuning y test; una embebidura por
+  pregunta (`scores_canales` + cache).
+- `rrf(..., w_lex, w_dense)`, `HybridRetriever.scores_canales` y
+  `hits_rrf` para fusionar sin re-embeber.
+- Tests sin red de flags, formato del esperado, cache y pesos RRF.
+
+### Files
+
+- `rag/hybrid.py`
+- `scripts/eval_gold.py`
+- `tests/test_eval_gold.py`
+- `tests/test_chunking.py`
+- `README.md`
+- `CHANGELOG.md`
+
+### Tests
+
+`224 passed, 1 skipped`.
+
 ## 2026-10-25 — feat/rag-rerank-off-por-defecto
 
 ### Added

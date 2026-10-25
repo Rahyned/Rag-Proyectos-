@@ -55,6 +55,10 @@ def test_rrf_favors_documents_ranked_by_both_signals():
     lex = np.array([0.8, 0.6, 0.0], dtype=np.float32)
     combined = rrf(dense, lex)
     assert combined.argmax() == 0
+    # Con mucho peso léxico gana el mejor de BM25 aunque el denso diga otra cosa.
+    dense2 = np.array([0.9, 0.1], dtype=np.float32)
+    lex2 = np.array([0.1, 0.9], dtype=np.float32)
+    assert rrf(dense2, lex2, w_lex=3.0, w_dense=1.0).argmax() == 1
 
 
 def test_chunk_dataclass_roundtrip():

@@ -112,10 +112,12 @@ def bm25_scores(query: str, tokens_per_doc: list[list[str]],
     return scores
 
 
-def rrf(dense: np.ndarray, lex: np.ndarray, k: int = RRF_K) -> np.ndarray:
+def rrf(dense: np.ndarray, lex: np.ndarray, k: int = RRF_K,
+        w_dense: float = 1.0, w_lex: float = 1.0) -> np.ndarray:
+    """Fusión por rangos. `w_lex`:`w_dense` pondera BM25 frente al canal denso."""
     r_dense = np.argsort(np.argsort(-dense)).astype(np.float32) + 1
     r_lex = np.argsort(np.argsort(-lex)).astype(np.float32) + 1
-    return 1.0 / (k + r_dense) + 1.0 / (k + r_lex)
+    return w_dense / (k + r_dense) + w_lex / (k + r_lex)
 
 
 def texto_lexico(text: str, seccion: str = "") -> str:
@@ -285,10 +287,9 @@ class HybridRetriever:
              proyecto: str | None = None) -> list[dict]:
         allowed = self._mascara(proyecto, query)
         scores = self._peso_glosario(self._lex(query, allowed))
-        doc_id = self._doc_nombrado(query)
+        doc_id = self._doc_nombrado(query, allowed)
         if (
             doc_id
-            and self._doc_en(doc_id, allowed)
             and _pide_panorama(query, _documentos().get(doc_id, {}).get("title", ""))
         ):
             return self._hits_priorizando_intro(scores, top_k, doc_id)
@@ -307,13 +308,15 @@ class HybridRetriever:
         # El glosario se castiga en el ranking, no en el umbral: una pregunta
         # que solo matchea una definición igual abre el gate.
         lex_rank = self._peso_glosario(lex)
-        nombres = self._nombres_en(query)
+        # Solo se ignoran nombres de docs del recorte actual. Un "RioDent" en
+        # una FAQ de portafolio no puede apagar el gate porque el doc
+        # laboratorio-riodent está fuera del filtro.
+        nombres = self._nombres_en(query, allowed)
         lex_umbral = self._lex(query, allowed, ignorar=nombres) if nombres else lex
         top1 = float(lex_umbral.max()) if lex_umbral.size else 0.0
-        doc_id = self._doc_nombrado(query)
+        doc_id = self._doc_nombrado(query, allowed)
         if (
             doc_id
-            and self._doc_en(doc_id, allowed)
             and _pide_panorama(query, _documentos().get(doc_id, {}).get("title", ""))
         ):
             # «¿Qué es X?», «¿cómo funciona X?» y similares priorizan la
@@ -323,7 +326,6 @@ class HybridRetriever:
         if top1 < MIN_TOP1_SCORE:
             if (
                 doc_id
-                and self._doc_en(doc_id, allowed)
                 and self._tiene_termino(query, allowed, ignorar=nombres)
             ):
                 return self._hits_priorizando_intro(lex_rank, top_k, doc_id)
@@ -389,6 +391,70 @@ class HybridRetriever:
             raise EmbedError("dimension")
         return arr
 
+    def _dense_por_rango(self, dense_vec: np.ndarray,
+                         allowed: np.ndarray) -> np.ndarray:
+        """Score denso = 1/(1+rango) solo dentro del subconjunto permitido."""
+        dense = np.zeros(self._n, dtype=np.float32)
+        sub = np.flatnonzero(allowed)
+        if len(sub) == 0:
+            return dense
+        _, idx = self.index.search(dense_vec, self._n)
+        permitidos = set(int(i) for i in sub)
+        rango = 0
+        for i in idx[0]:
+            i = int(i)
+            if i in permitidos:
+                dense[i] = 1.0 / (1.0 + rango)
+                rango += 1
+        return dense
+
+    def scores_canales(
+        self, query: str, proyecto: str | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        """`(lex, dense, allowed)` para una consulta. Embebe una sola vez.
+
+        `dense` usa rangos 1/(1+r) en el proyecto (0 fuera). None si el
+        canal denso no está disponible. El cache del embedder evita repetir
+        la llamada cuando la eval prueba varias fusiones RRF.
+        """
+        allowed = self._mascara(proyecto, query)
+        lex = self._lex(query, allowed)
+        if (
+            not dense_enabled()
+            or self._embedder is None
+            or self._dense_error is not None
+        ):
+            return None
+        try:
+            dense_vec = self._vector_consulta(query)
+        except EmbedError:
+            return None
+        except Exception:  # noqa: BLE001 — la eval degrada a sin denso
+            return None
+        dense = self._dense_por_rango(dense_vec, allowed)
+        return lex, dense, allowed
+
+    def hits_rrf(
+        self,
+        lex: np.ndarray,
+        dense: np.ndarray,
+        allowed: np.ndarray,
+        *,
+        top_k: int = TOP_K,
+        k: int = RRF_K,
+        w_lex: float = 1.0,
+        w_dense: float = 1.0,
+    ) -> list[dict]:
+        """Top-k RRF a partir de scores ya calculados (sin re-embeber)."""
+        sub = np.flatnonzero(allowed)
+        if len(sub) == 0:
+            return []
+        combinado = np.zeros(self._n, dtype=np.float32)
+        combinado[sub] = rrf(
+            dense[sub], lex[sub], k=k, w_dense=w_dense, w_lex=w_lex,
+        )
+        return self._hits(self._peso_glosario(combinado), top_k, engine="hibrida")
+
     def _search_hybrid(self, query: str, top_k: int, allowed: np.ndarray,
                        lex: np.ndarray) -> list[dict]:
         sub = np.flatnonzero(allowed)
@@ -397,24 +463,23 @@ class HybridRetriever:
         dense_vec = self._vector_consulta(query)
         # El ranking denso se arma solo con los chunks del proyecto: un vecino
         # de otro proyecto no le puede sacar el lugar.
-        _, idx = self.index.search(dense_vec, self._n)
-        dense = np.zeros(self._n, dtype=np.float32)
-        permitidos = set(int(i) for i in sub)
-        rango = 0
-        for i in idx[0]:
-            i = int(i)
-            if i in permitidos:
-                dense[i] = 1.0 / (1.0 + rango)
-                rango += 1
-        combinado = np.zeros(self._n, dtype=np.float32)
-        combinado[sub] = rrf(dense[sub], lex[sub])
-        return self._hits(self._peso_glosario(combinado), top_k, engine="hibrida")
+        dense = self._dense_por_rango(dense_vec, allowed)
+        return self.hits_rrf(lex, dense, allowed, top_k=top_k)
 
-    def _doc_nombrado(self, query: str) -> str | None:
+    def _doc_nombrado(self, query: str,
+                      allowed: np.ndarray | None = None) -> str | None:
+        """Primer doc cuyos nombres aparecen en la query.
+
+        Con `allowed`, solo considera documentos presentes en ese recorte
+        (mismo filtro de proyecto que el ranking).
+        """
         tokens = set(tokenize(query))
         for doc_id, meta in _documentos().items():
-            if tokens & meta["nombres"]:
-                return doc_id
+            if not (tokens & meta["nombres"]):
+                continue
+            if allowed is not None and not self._doc_en(doc_id, allowed):
+                continue
+            return doc_id
         return None
 
     def _doc_en(self, doc_id: str, allowed: np.ndarray) -> bool:
@@ -423,9 +488,15 @@ class HybridRetriever:
             for i in range(self._n)
         )
 
-    def _nombres_en(self, query: str) -> set[str]:
-        """Tokens del documento o proyecto que la pregunta nombra."""
-        doc_id = self._doc_nombrado(query)
+    def _nombres_en(self, query: str,
+                    allowed: np.ndarray | None = None) -> set[str]:
+        """Tokens del documento (en scope) que la pregunta nombra.
+
+        Fuera del recorte no cuentan: si no, «RioDent» en una FAQ del
+        portafolio vaciaba el umbral porque el doc de laboratorio no está
+        permitido y el gate devolvía lista vacía sin llegar al RRF.
+        """
+        doc_id = self._doc_nombrado(query, allowed)
         if not doc_id:
             return set()
         return set(_documentos().get(doc_id, {}).get("nombres", ()))

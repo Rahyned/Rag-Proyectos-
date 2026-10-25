@@ -68,7 +68,11 @@ def _ultimo(seccion: str) -> str:
 
 
 def _hit_cubre(hit: dict, spec: dict) -> bool:
-    """Una página del PDF o el último tramo de la sección del Markdown."""
+    """Una página del PDF o el último tramo de la sección del Markdown.
+
+    Acepta igualdad, sufijo de la ruta, o prefijo del último tramo
+    («Orden de trabajo» cubre «Orden de trabajo digital de…»).
+    """
     if spec.get("doc_id") and hit.get("doc_id") != spec["doc_id"]:
         return False
     if "page" in spec or "pages" in spec:
@@ -81,7 +85,12 @@ def _hit_cubre(hit: dict, spec: dict) -> bool:
         return False
     ultimo = _ultimo(hit.get("seccion") or "")
     texto = hit.get("seccion") or ""
-    return any(ultimo == seccion or texto.endswith(seccion) for seccion in secciones)
+    return any(
+        ultimo == seccion
+        or texto.endswith(seccion)
+        or (seccion and ultimo.startswith(seccion + " "))
+        for seccion in secciones
+    )
 
 
 def _specs(entry: dict) -> list[dict]:
