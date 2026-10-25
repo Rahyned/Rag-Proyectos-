@@ -177,6 +177,45 @@ def test_formato_esperado_pagina_y_seccion():
     })
 
 
+def test_acierto_todos_acepta_cualquiera_de_las_specs():
+    """Con `acepta`, basta un esperado en el top-k (OR, no AND)."""
+    from tests.test_gold import _acierto
+
+    entry = {
+        "q": "¿cómo encargo un trabajo?",
+        "proyecto": "todos",
+        "acepta": [
+            {"doc_id": "portafolio-web", "section": "¿Qué es esta página?"},
+            {"doc_id": "portafolio-web", "section": "¿Cómo hago un pedido?"},
+            {"doc_id": "laboratorio-riodent", "section": "Orden de trabajo"},
+            {"doc_id": "solutionscars", "section": "¿Cómo hago un pedido?"},
+        ],
+    }
+    # Ningún acepta en el top 3 → fallo (caso RRF puro del gold).
+    misses = [
+        {"doc_id": "laboratorio-riodent",
+         "seccion": "Lab › ¿Cómo hago un pedido?"},
+        {"doc_id": "portafolio-web",
+         "seccion": "web › Pedir un trabajo"},
+        {"doc_id": "stella", "seccion": "1.7 El flujo completo"},
+    ]
+    assert not _acierto(misses, entry, k=3)
+    # Prefijo de sección: «Orden de trabajo digital…» cubre «Orden de trabajo».
+    hits = [
+        {"doc_id": "stella", "seccion": "otro"},
+        {"doc_id": "laboratorio-riodent",
+         "seccion": "Lab › Orden de trabajo digital de Laboratorio RioDent"},
+        {"doc_id": "stella", "seccion": "otro2"},
+    ]
+    assert _acierto(hits, entry, k=3)
+    # Cualquiera de las specs de portafolio alcanza.
+    assert _acierto(
+        [{"doc_id": "portafolio-web",
+          "seccion": "x › ¿Cómo hago un pedido?"}],
+        entry, k=3,
+    )
+
+
 def test_rrf_con_peso_lexico_mayor_prioriza_bm25():
     dense = np.array([0.9, 0.1], dtype=np.float32)
     lex = np.array([0.1, 0.9], dtype=np.float32)

@@ -287,10 +287,9 @@ class HybridRetriever:
              proyecto: str | None = None) -> list[dict]:
         allowed = self._mascara(proyecto, query)
         scores = self._peso_glosario(self._lex(query, allowed))
-        doc_id = self._doc_nombrado(query)
+        doc_id = self._doc_nombrado(query, allowed)
         if (
             doc_id
-            and self._doc_en(doc_id, allowed)
             and _pide_panorama(query, _documentos().get(doc_id, {}).get("title", ""))
         ):
             return self._hits_priorizando_intro(scores, top_k, doc_id)
@@ -309,13 +308,15 @@ class HybridRetriever:
         # El glosario se castiga en el ranking, no en el umbral: una pregunta
         # que solo matchea una definición igual abre el gate.
         lex_rank = self._peso_glosario(lex)
-        nombres = self._nombres_en(query)
+        # Solo se ignoran nombres de docs del recorte actual. Un "RioDent" en
+        # una FAQ de portafolio no puede apagar el gate porque el doc
+        # laboratorio-riodent está fuera del filtro.
+        nombres = self._nombres_en(query, allowed)
         lex_umbral = self._lex(query, allowed, ignorar=nombres) if nombres else lex
         top1 = float(lex_umbral.max()) if lex_umbral.size else 0.0
-        doc_id = self._doc_nombrado(query)
+        doc_id = self._doc_nombrado(query, allowed)
         if (
             doc_id
-            and self._doc_en(doc_id, allowed)
             and _pide_panorama(query, _documentos().get(doc_id, {}).get("title", ""))
         ):
             # «¿Qué es X?», «¿cómo funciona X?» y similares priorizan la
@@ -325,7 +326,6 @@ class HybridRetriever:
         if top1 < MIN_TOP1_SCORE:
             if (
                 doc_id
-                and self._doc_en(doc_id, allowed)
                 and self._tiene_termino(query, allowed, ignorar=nombres)
             ):
                 return self._hits_priorizando_intro(lex_rank, top_k, doc_id)
@@ -466,11 +466,20 @@ class HybridRetriever:
         dense = self._dense_por_rango(dense_vec, allowed)
         return self.hits_rrf(lex, dense, allowed, top_k=top_k)
 
-    def _doc_nombrado(self, query: str) -> str | None:
+    def _doc_nombrado(self, query: str,
+                      allowed: np.ndarray | None = None) -> str | None:
+        """Primer doc cuyos nombres aparecen en la query.
+
+        Con `allowed`, solo considera documentos presentes en ese recorte
+        (mismo filtro de proyecto que el ranking).
+        """
         tokens = set(tokenize(query))
         for doc_id, meta in _documentos().items():
-            if tokens & meta["nombres"]:
-                return doc_id
+            if not (tokens & meta["nombres"]):
+                continue
+            if allowed is not None and not self._doc_en(doc_id, allowed):
+                continue
+            return doc_id
         return None
 
     def _doc_en(self, doc_id: str, allowed: np.ndarray) -> bool:
@@ -479,9 +488,15 @@ class HybridRetriever:
             for i in range(self._n)
         )
 
-    def _nombres_en(self, query: str) -> set[str]:
-        """Tokens del documento o proyecto que la pregunta nombra."""
-        doc_id = self._doc_nombrado(query)
+    def _nombres_en(self, query: str,
+                    allowed: np.ndarray | None = None) -> set[str]:
+        """Tokens del documento (en scope) que la pregunta nombra.
+
+        Fuera del recorte no cuentan: si no, «RioDent» en una FAQ del
+        portafolio vaciaba el umbral porque el doc de laboratorio no está
+        permitido y el gate devolvía lista vacía sin llegar al RRF.
+        """
+        doc_id = self._doc_nombrado(query, allowed)
         if not doc_id:
             return set()
         return set(_documentos().get(doc_id, {}).get("nombres", ()))

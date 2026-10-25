@@ -346,8 +346,12 @@ def _hit_counts(retriever, entries: list[dict], cache: dict,
 
 
 def _imprimir_fallos(retriever, entries: list[dict]) -> None:
-    """Preguntas del gold donde la híbrida (RRF default) falla en top 3."""
-    print("\nfallos híbrida (top 3)")
+    """Preguntas del gold donde `search()` (ruta de prod) falla en top 3.
+
+    Imprime también BM25 / denso / RRF sin el gate de `search()`, para ver
+    si el fallo viene del umbral o del ranking.
+    """
+    print("\nfallos híbrida (top 3) — criterio: search() de producción")
     n_fallos = 0
     for entry in _positivos(entries):
         hibrida = retriever.search(entry["q"], TOP_K, proyecto=entry["proyecto"])
@@ -356,6 +360,7 @@ def _imprimir_fallos(retriever, entries: list[dict]) -> None:
         n_fallos += 1
         print(f"\n  [{entry['proyecto']}] {entry['q']!r}")
         print(f"  esperado: {_formato_esperado(entry)}")
+        _imprimir_canal("search() producción", hibrida[:5])
         bm25 = retriever.bm25(entry["q"], 5, proyecto=entry["proyecto"])
         scores = retriever.scores_canales(entry["q"], proyecto=entry["proyecto"])
         if scores is None:
@@ -369,13 +374,16 @@ def _imprimir_fallos(retriever, entries: list[dict]) -> None:
         )
         _imprimir_canal("BM25", bm25)
         _imprimir_canal("denso", denso)
-        _imprimir_canal("RRF 1:1 k=60", rrf_hits)
+        _imprimir_canal("RRF 1:1 k=60 (sin gate search)", rrf_hits)
     print(f"\n  total fallos top3: {n_fallos}")
 
 
 def _rrf_grid(retriever, tuning: list[dict], test: list[dict]) -> None:
-    """Grilla de pesos BM25:denso × k; una embebidura por pregunta."""
-    print("\nrrf-grid (BM25:denso × k)")
+    """Grilla de pesos BM25:denso × k; una embebidura por pregunta.
+
+    Usa RRF directo (`hits_rrf`), no el gate/panorama de `search()`.
+    """
+    print("\nrrf-grid (BM25:denso × k; sin gate de search())")
     print(
         f"  {'peso':<10} {'k':>4}  "
         f"{'tun@3':>7} {'tun@5':>7}  "

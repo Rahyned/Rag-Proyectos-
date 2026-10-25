@@ -148,6 +148,44 @@ def test_riodent_no_aparece_si_el_proyecto_es_stella(monkeypatch):
     assert all(h["doc_id"] != "laboratorio-riodent" for h in hits)
 
 
+def test_gate_no_vacia_por_nombre_de_otro_proyecto(monkeypatch):
+    """Nombres de docs fuera del filtro no apagan el umbral BM25.
+
+    Antes, «RioDent» / «sistemas» matcheaban laboratorio o SolutionsCars,
+    se ignoraban en el umbral y `search()` devolvía [] en portafolio-web
+    aunque el RRF tuviera la FAQ correcta primera.
+    """
+    monkeypatch.setenv("RAG_DENSE", "0")
+    from tests.test_gold import _acierto, _leer, GOLD_TEST_PATH
+
+    retriever = _retriever()
+    gold = {item["q"]: item for item in _leer(GOLD_TEST_PATH)}
+    for consulta in (
+        "¿qué es RioDent en el portafolio?",
+        "¿qué proyectos de sistemas hay?",
+    ):
+        entry = gold[consulta]
+        hits = retriever.search(consulta, 5, proyecto=entry["proyecto"])
+        assert hits, consulta
+        assert _acierto(hits, entry, k=3), consulta
+
+
+def test_nombres_en_solo_docs_del_recorte(monkeypatch):
+    monkeypatch.setenv("RAG_DENSE", "0")
+    retriever = _retriever()
+    allowed = retriever._mascara("portafolio-web", "¿qué es RioDent en el portafolio?")
+    # Sin filtro: gana laboratorio-riodent. Con filtro: portafolio o nada de lab.
+    assert retriever._doc_nombrado("¿qué es RioDent en el portafolio?") == (
+        "laboratorio-riodent"
+    )
+    assert retriever._doc_nombrado(
+        "¿qué es RioDent en el portafolio?", allowed,
+    ) != "laboratorio-riodent"
+    assert "riodent" not in retriever._nombres_en(
+        "¿qué es RioDent en el portafolio?", allowed,
+    )
+
+
 def test_aceite_en_riodent_no_se_abre_por_un_sinonimo():
     """«aceite» no dispara un sinónimo que meta vocabulario del laboratorio."""
     from rag.sinonimos import expandir
