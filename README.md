@@ -44,6 +44,8 @@ Eval del gold (cupo propio, no gasta producción):
 uv run python scripts/eval_gold.py
 uv run python scripts/eval_gold.py --rerank
 uv run python scripts/eval_gold.py --solo-top10   # implica --rerank, solo top_n=10
+uv run python scripts/eval_gold.py --fallos       # top 5 BM25/denso/RRF de los fallos
+uv run python scripts/eval_gold.py --rrf-grid     # grilla pesos×k (1 embed por pregunta)
 ```
 
 Las variables de entorno están documentadas en `.env.example`. Para sumar un proyecto, se agregan sus documentos a `corpus/<proyecto>/`, se registra en `corpus/manifiesto.json` y se reindexa con `scripts/ingest.py`.
