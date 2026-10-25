@@ -234,7 +234,7 @@ class HybridRetriever:
         self._model_name = embed_model
         # None explícito arma el proveedor según el entorno; un objeto lo inyecta.
         self._embedder = crear_embedder() if embedder is None else embedder
-        # Se arma siempre: `RERANK_ENABLED` se consulta por consulta, así el
+        # Se arma siempre: `RAG_RERANK` se consulta por consulta, así el
         # mismo retriever sirve para comparar con y sin reranker.
         self._reranker = (
             CloudflareReranker() if reranker is None else reranker

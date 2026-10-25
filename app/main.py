@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from rag.config import (CHUNKS_PATH, CORPUS_DIR, INDEX_PATH, dense_enabled,
-                        embeddings_provider)
+                        embeddings_provider, rag_rerank)
 from rag.manifiesto import ManifiestoError, ids_proyectos, proyectos_publicos
 
 import app.config as config
@@ -124,6 +124,7 @@ def health():
         "model": config.llm_model(),
         "dense": dense_enabled(),
         "embeddings": provider,
+        "rerank": rag_rerank(),
         "index_dim": _index_dim(),
         "dense_error": rag_service.last_dense_error(),
         "dense_error_origen": origen,

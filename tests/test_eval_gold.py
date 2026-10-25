@@ -6,11 +6,13 @@ import pytest
 
 from scripts.eval_gold import (
     _comparar_reranker,
+    _configurar_rerank,
     default_embeddings_provider,
     estimar_llamadas_cloudflare,
     flags_cli,
     top_ns_rerank,
 )
+from rag.config import rag_rerank, rag_rerank_weight
 
 
 @pytest.mark.parametrize(
@@ -133,3 +135,16 @@ def test_comparar_reranker_solo_top10_no_configura_top20():
 
     assert 20 not in tops
     assert tops.count(10) >= 1
+
+
+def test_configurar_rerank_pisa_rag_rerank_del_entorno(monkeypatch):
+    """--rerank mide fuse/replace aunque producción tenga RAG_RERANK=off."""
+    monkeypatch.setenv("RAG_RERANK", "off")
+    monkeypatch.setenv("RAG_RERANK_WEIGHT", "0.1")
+    _configurar_rerank(enabled=True, mode="fuse", peso=0.7, top_n=10)
+    assert rag_rerank() == "fuse"
+    assert rag_rerank_weight() == 0.7
+    _configurar_rerank(enabled=True, mode="replace", peso=0.5, top_n=10)
+    assert rag_rerank() == "replace"
+    _configurar_rerank(enabled=False)
+    assert rag_rerank() == "off"

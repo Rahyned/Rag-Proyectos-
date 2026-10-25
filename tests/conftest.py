@@ -16,6 +16,8 @@ def _reset_ratelimit(monkeypatch):
     monkeypatch.delenv("CF_EVAL_DAILY_BUDGET", raising=False)
     monkeypatch.delenv("CF_USAGE_SCOPE", raising=False)
     monkeypatch.delenv("EMBEDDINGS_PROVIDER", raising=False)
+    monkeypatch.delenv("RAG_RERANK", raising=False)
+    monkeypatch.delenv("RAG_RERANK_WEIGHT", raising=False)
     monkeypatch.delenv("RERANK_ENABLED", raising=False)
     monkeypatch.delenv("RERANK_TOP_N", raising=False)
     monkeypatch.delenv("RERANK_KEEP", raising=False)

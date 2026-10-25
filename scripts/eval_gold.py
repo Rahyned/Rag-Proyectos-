@@ -111,7 +111,9 @@ CASOS = (
 
 _PESOS_FUSE = (0.3, 0.5, 0.7)
 _RERANK_VARS = (
-    "RERANK_ENABLED", "RERANK_MODE", "RERANK_WEIGHT", "RERANK_TOP_N",
+    "RAG_RERANK", "RAG_RERANK_WEIGHT", "RERANK_TOP_N",
+    # Compat: si el entorno traía las viejas, se restauran al salir.
+    "RERANK_ENABLED", "RERANK_MODE", "RERANK_WEIGHT",
 )
 
 
@@ -182,10 +184,14 @@ def _casos(retriever) -> None:
 
 def _configurar_rerank(*, enabled: bool, mode: str = "fuse",
                        peso: float = 0.5, top_n: int = 20) -> None:
-    os.environ["RERANK_ENABLED"] = "1" if enabled else "0"
-    os.environ["RERANK_MODE"] = mode
-    os.environ["RERANK_WEIGHT"] = str(peso)
+    # Pisa RAG_RERANK del entorno: --rerank mide todas las configs igual.
+    os.environ["RAG_RERANK"] = mode if enabled else "off"
+    os.environ["RAG_RERANK_WEIGHT"] = str(peso)
     os.environ["RERANK_TOP_N"] = str(top_n)
+    # Evita que RERANK_ENABLED viejo pelee con RAG_RERANK=off.
+    os.environ.pop("RERANK_ENABLED", None)
+    os.environ.pop("RERANK_MODE", None)
+    os.environ.pop("RERANK_WEIGHT", None)
 
 
 def _resumen_gold(retriever, entries: list[dict], metodo: str) -> None:
@@ -265,7 +271,8 @@ def main() -> None:
     )
     # Las tablas de siempre son el baseline RRF: el reranker solo se paga
     # con --rerank, y ahí el cache reutiliza las llamadas entre configuraciones.
-    os.environ["RERANK_ENABLED"] = "0"
+    os.environ["RAG_RERANK"] = "off"
+    os.environ.pop("RERANK_ENABLED", None)
     if comparar and not hibrida:
         print("reranker: el denso está apagado; no hay híbrida que reordenar")
         comparar = False

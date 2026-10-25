@@ -123,10 +123,28 @@ def glosario_peso() -> float:
     return valor if 0.0 <= valor <= 1.0 else 0.5
 
 
+def rag_rerank() -> str:
+    """Modo de rerank: `off` | `fuse` | `replace`. Default `off`.
+
+    `RAG_RERANK` gana. Si no está, queda la compat con `RERANK_ENABLED` +
+    `RERANK_MODE` (tests y scripts viejos). Con `off` no se llama a
+    Cloudflare y se usa el orden del RRF.
+    """
+    raw = os.getenv("RAG_RERANK", "").strip().lower()
+    if raw in ("off", "fuse", "replace"):
+        return raw
+    if raw:
+        return "off"
+    enabled = os.getenv("RERANK_ENABLED", "").strip().lower()
+    if enabled in ("1", "true", "si", "sí", "yes", "on"):
+        mode = os.getenv("RERANK_MODE", "").strip().lower()
+        return "replace" if mode == "replace" else "fuse"
+    return "off"
+
+
 def rerank_enabled() -> bool:
-    """`RERANK_ENABLED=1|true|si|yes|on` activa el reranker. Default: apagado."""
-    raw = os.getenv("RERANK_ENABLED", "").strip().lower()
-    return raw in ("1", "true", "si", "sí", "yes", "on")
+    """True si `rag_rerank()` no es `off`."""
+    return rag_rerank() != "off"
 
 
 def rerank_top_n() -> int:
@@ -140,21 +158,31 @@ def rerank_keep() -> int:
 
 
 def rerank_mode() -> str:
-    """`fuse` (default) recombina con el RRF; `replace` usa solo el reranker."""
-    raw = os.getenv("RERANK_MODE", "").strip().lower()
-    return "replace" if raw == "replace" else "fuse"
+    """`fuse` o `replace` según `rag_rerank()`. Con `off` reporta `fuse`."""
+    return "replace" if rag_rerank() == "replace" else "fuse"
+
+
+def rag_rerank_weight() -> float:
+    """Peso del reranker en `fuse`. Lee `RAG_RERANK_WEIGHT` (default 0.5).
+
+    Si falta, acepta `RERANK_WEIGHT` por compat con la eval y tests viejos.
+    """
+    for name in ("RAG_RERANK_WEIGHT", "RERANK_WEIGHT"):
+        raw = os.getenv(name, "").strip()
+        if not raw:
+            continue
+        try:
+            valor = float(raw)
+        except ValueError:
+            continue
+        if 0.0 <= valor <= 1.0:
+            return valor
+    return 0.5
 
 
 def rerank_weight() -> float:
-    """Peso del reranker en `fuse`. 0 = solo RRF, 1 = solo reranker. Default 0.5."""
-    raw = os.getenv("RERANK_WEIGHT", "").strip()
-    if not raw:
-        return 0.5
-    try:
-        valor = float(raw)
-    except ValueError:
-        return 0.5
-    return valor if 0.0 <= valor <= 1.0 else 0.5
+    """Alias de `rag_rerank_weight()` para el híbrido."""
+    return rag_rerank_weight()
 
 
 # Modelo servido por la API de Jina. Mismo espacio que el ONNX local si el

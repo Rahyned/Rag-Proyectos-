@@ -1,5 +1,40 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-25 — feat/rag-rerank-off-por-defecto
+
+### Added
+
+- `RAG_RERANK` (`off` | `fuse` | `replace`, default `off`) y
+  `RAG_RERANK_WEIGHT` (default 0.5). Con `off` no se llama a Cloudflare
+  para rerank: queda el orden RRF.
+- `/api/health` expone el modo activo en `rerank`.
+- Tests de config, health y de que `eval_gold --rerank` pisa `RAG_RERANK`.
+
+### Changed
+
+- La eval configura `RAG_RERANK` / `RAG_RERANK_WEIGHT` al medir; sigue
+  comparando todas las configs aunque producción tenga `off`.
+- `.env.example` y README documentan las nuevas variables (reemplazan
+  `RERANK_ENABLED` / `RERANK_MODE` / `RERANK_WEIGHT` en la config de
+  ejemplo; esas quedan solo como compat).
+
+### Files
+
+- `rag/config.py`
+- `app/main.py`
+- `scripts/eval_gold.py`
+- `tests/conftest.py`
+- `tests/test_health.py`
+- `tests/test_rerank.py`
+- `tests/test_eval_gold.py`
+- `.env.example`
+- `README.md`
+- `CHANGELOG.md`
+
+### Tests
+
+`216 passed, 1 skipped`.
+
 ## 2026-10-25 — feat/cupos-cloudflare-separados
 
 ### Added

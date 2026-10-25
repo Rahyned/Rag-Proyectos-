@@ -15,7 +15,8 @@ import pytest
 
 from app import ratelimit
 from rag import rerank as rerank_mod
-from rag.config import CF_RERANK_URL
+from rag.config import (CF_RERANK_URL, rag_rerank, rag_rerank_weight,
+                        rerank_enabled)
 from rag.hybrid import HybridRetriever
 from rag.rerank import CloudflareReranker, RerankError
 
@@ -25,6 +26,35 @@ FILAS = [
     ("stella:p3:2", "restaurar un backup de la base de datos"),
 ]
 QUERY = "agregar un cliente nuevo en el laboratorio"
+
+
+@pytest.mark.parametrize(
+    "env, esperado",
+    [
+        ({}, "off"),
+        ({"RAG_RERANK": "off"}, "off"),
+        ({"RAG_RERANK": "fuse"}, "fuse"),
+        ({"RAG_RERANK": "replace"}, "replace"),
+        ({"RAG_RERANK": "raro"}, "off"),
+        ({"RERANK_ENABLED": "1"}, "fuse"),
+        ({"RERANK_ENABLED": "1", "RERANK_MODE": "replace"}, "replace"),
+        ({"RAG_RERANK": "off", "RERANK_ENABLED": "1"}, "off"),
+    ],
+)
+def test_rag_rerank_default_off(monkeypatch, env, esperado):
+    for key, valor in env.items():
+        monkeypatch.setenv(key, valor)
+    assert rag_rerank() == esperado
+    assert rerank_enabled() is (esperado != "off")
+
+
+def test_rag_rerank_weight(monkeypatch):
+    assert rag_rerank_weight() == 0.5
+    monkeypatch.setenv("RAG_RERANK_WEIGHT", "0.7")
+    assert rag_rerank_weight() == 0.7
+    monkeypatch.delenv("RAG_RERANK_WEIGHT", raising=False)
+    monkeypatch.setenv("RERANK_WEIGHT", "0.3")
+    assert rag_rerank_weight() == 0.3
 
 
 class EmbedderFijo:
@@ -213,21 +243,21 @@ def test_fuse_respeta_keep(tmp_path, monkeypatch):
 def test_modo_y_peso_del_entorno(monkeypatch):
     from rag import config as rag_config
 
-    monkeypatch.delenv("RERANK_MODE", raising=False)
-    monkeypatch.delenv("RERANK_WEIGHT", raising=False)
+    assert rag_config.rag_rerank() == "off"
     assert rag_config.rerank_mode() == "fuse"
     assert rag_config.rerank_weight() == 0.5
 
-    monkeypatch.setenv("RERANK_MODE", "replace")
+    monkeypatch.setenv("RAG_RERANK", "replace")
     assert rag_config.rerank_mode() == "replace"
-    monkeypatch.setenv("RERANK_MODE", "cualquier-cosa")
+    monkeypatch.setenv("RAG_RERANK", "raro")
+    assert rag_config.rag_rerank() == "off"
     assert rag_config.rerank_mode() == "fuse"
 
     for valor in ("0", "0.3", "1"):
-        monkeypatch.setenv("RERANK_WEIGHT", valor)
+        monkeypatch.setenv("RAG_RERANK_WEIGHT", valor)
         assert rag_config.rerank_weight() == float(valor)
     for valor in ("-0.1", "1.1", "no-es-numero"):
-        monkeypatch.setenv("RERANK_WEIGHT", valor)
+        monkeypatch.setenv("RAG_RERANK_WEIGHT", valor)
         assert rag_config.rerank_weight() == 0.5
 
 

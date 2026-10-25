@@ -50,7 +50,7 @@ Las variables de entorno están documentadas en `.env.example`. Para sumar un pr
 
 ## Estado
 
-En producción (fases 0–11 completadas). Reranker opcional (`RERANK_ENABLED`); pendiente calibrar pesos y medir el gold completo con Cloudflare.
+En producción (fases 0–11 completadas). Reranker apagado por defecto (`RAG_RERANK=off`); `fuse` / `replace` opcionales tras medir con `eval_gold.py --rerank`.
 
 ## Autor
 
