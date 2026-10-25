@@ -1,5 +1,28 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-25 — fix/eval-gold-cloudflare-default
+
+### Added
+
+- Test del default de `EMBEDDINGS_PROVIDER` en `scripts/eval_gold.py`
+  (Cloudflare, Jina, `off`, y CF incompleto).
+
+### Changed
+
+- Sin `EMBEDDINGS_PROVIDER` explícito, `eval_gold.py` elige `cloudflare`
+  si hay `CF_ACCOUNT_ID` y `CF_API_TOKEN`; si no, `api` con `JINA_API_KEY`;
+  si no hay ninguna, `off`.
+
+### Files
+
+- `scripts/eval_gold.py`
+- `tests/test_eval_gold.py`
+- `CHANGELOG.md`
+
+### Tests
+
+`189 passed, 1 skipped`.
+
 ## 2026-10-24 — feat/mejora-docs-chunks
 
 ### Added

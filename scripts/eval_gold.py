@@ -1,7 +1,8 @@
 """Imprime hit@3 y hit@5 del gold, por proyecto, para BM25 y la híbrida.
 
 Si `EMBEDDINGS_PROVIDER` está definida, se respeta (por ejemplo `off` para
-medir solo BM25). Si no, con `JINA_API_KEY` usa Jina y sin key apaga el
+medir solo BM25). Si no, con `CF_ACCOUNT_ID` y `CF_API_TOKEN` usa
+Cloudflare; si no, con `JINA_API_KEY` usa Jina; sin ninguna, apaga el
 denso: el modelo local (ONNX) no se carga.
 
 `--rerank` agrega la comparación del gold de test: RRF solo, reranker en
@@ -19,18 +20,33 @@ from __future__ import annotations
 import os
 import sys
 from collections import defaultdict
+from collections.abc import MutableMapping
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# Antes de importar rag: fuera de Vercel el default es el ONNX local.
+
+def default_embeddings_provider(
+    environ: MutableMapping[str, str] | None = None,
+) -> str:
+    """Elige el provider cuando `EMBEDDINGS_PROVIDER` no está seteada.
+
+    Cloudflare gana si hay cuenta y token; si no, Jina con `JINA_API_KEY`;
+    sin credenciales, `off` (solo BM25, sin ONNX local).
+    """
+    env = os.environ if environ is None else environ
+    if env.get("CF_ACCOUNT_ID", "").strip() and env.get("CF_API_TOKEN", "").strip():
+        return "cloudflare"
+    if env.get("JINA_API_KEY", "").strip():
+        return "api"
+    return "off"
+
+
+# Antes de importar rag: sin provider explícito no se carga el ONNX local.
 if not os.environ.get("EMBEDDINGS_PROVIDER", "").strip():
-    if os.environ.get("JINA_API_KEY"):
-        os.environ["EMBEDDINGS_PROVIDER"] = "api"
-    else:
-        os.environ["EMBEDDINGS_PROVIDER"] = "off"
+    os.environ["EMBEDDINGS_PROVIDER"] = default_embeddings_provider()
 
 from app import config as app_config  # noqa: E402
 from rag.config import TOP_K  # noqa: E402
