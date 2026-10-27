@@ -317,7 +317,7 @@ function spawnWhale(rand, cssW, cssH, layer, variantId) {
     phase: rand() * Math.PI * 2,
     wanderIn: 1.5 + rand() * 3.5,
     outTime: 0,
-    alphaMul: layer === 0 ? 0.38 : layer === 1 ? 0.58 : 0.88,
+    alphaMul: 0.85,
     tint: variant.palette.tint,
   }
 }
@@ -524,7 +524,7 @@ export function paintPreview(canvas, opts = {}) {
         layer: 2,
         phase: i,
         wanderIn: 99,
-        alphaMul: 0.92,
+        alphaMul: 0.85,
         tint: v.palette.tint,
       }
     })
@@ -667,7 +667,7 @@ export function mountFondo(canvas, opts = {}) {
         layer: 2,
         phase: 0,
         wanderIn: 99,
-        alphaMul: 0.75,
+        alphaMul: 0.85,
         tint: v.palette.tint,
       }]
     }
