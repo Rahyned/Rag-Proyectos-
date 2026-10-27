@@ -1,5 +1,31 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-27 — feat/fondo-ascii-fauna
+
+### Added
+
+- Fondo a pantalla completa con fauna ASCII de la costa argentina
+  (ballena franca austral, lobo marino, pingüino de Magallanes, tonina
+  overa) dibujada en `<canvas>` sin librerías ni imágenes externas.
+- UI en paneles de vidrio (blanco semitransparente + blur) y halo claro
+  detrás del título y del input; estado inicial centrado sin caja vacía.
+- Respeta `prefers-reduced-motion`, pausa con `document.hidden`, ~30 fps
+  y menos animales en móvil (`pointer-events: none`, `aria-hidden`).
+
+### Files
+
+- `client/src/lib/fauna-ascii.js`
+- `client/src/lib/fauna-ascii.test.js`
+- `client/src/FaunaBackground.jsx`
+- `client/src/App.jsx`
+- `client/src/styles.css`
+- `.github/workflows/ci.yml`
+- `CHANGELOG.md`
+
+### Tests
+
+`5 passed` (`npm test`) · lint + build OK.
+
 ## 2026-10-27 — feat/un-proyecto-por-consulta
 
 ### Changed
