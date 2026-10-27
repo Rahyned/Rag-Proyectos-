@@ -1,5 +1,73 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-27 — feat/ballenas-ascii-offscreen
+
+### Added
+
+- Fondo ASCII a pantalla completa por render offscreen + muestreo a
+  grilla (baldosas pastel + sombra + rampa ` .:-=+*#%@`), sin sprites.
+- Ballena cenital con 4 variantes pastel (gris-azul, azulada, cría
+  arena, callosa coral): tamaño, tinte y callosidades distintas.
+- Océano radial celeste (grilla, ondas, burbujas) detrás de la UI.
+- `/fauna-preview.html` con variantes quietas y en movimiento.
+
+### Changed
+
+- UI en una sola «hoja» glass (blur) sobre el océano; composer glass.
+- Nado: separación fija, asoman poco del borde, evitan esquinas;
+  pectorales visibles, más tonalidades y partículas/burbujas de agua.
+- El selector de proyecto muestra error + Reintentar si la API falla
+  (antes tragaba el error y dejaba el select vacío).
+
+### Files
+
+- `client/src/lib/fauna-ascii.js`
+- `client/src/lib/fondo-ascii.js`
+- `client/src/lib/fauna-ascii.test.js`
+- `client/src/lib/api.js`
+- `client/src/lib/consulta.js`
+- `client/src/lib/consulta.test.js`
+- `client/src/FaunaBackground.jsx`
+- `client/src/App.jsx`
+- `client/src/styles.css`
+- `client/src/fauna-preview.js`
+- `client/fauna-preview.html`
+- `client/vite.config.js`
+- `CHANGELOG.md`
+
+### Tests
+
+`236 passed, 1 skipped` (backend) · `7 passed` (`npm test`) · lint + build OK.
+
+## 2026-10-27 — feat/un-proyecto-por-consulta
+
+### Changed
+
+- La API exige exactamente un proyecto conocido en `/api/search` y
+  `/api/chat` (400 si falta, es `todos` o viene más de uno).
+- El retriever ya no detecta el proyecto desde el texto: solo filtra por
+  el `proyecto` pedido.
+- El selector de la UI quita «Todos», deshabilita Consultar sin proyecto
+  y muestra el aviso «Elegí un proyecto para preguntar».
+
+### Files
+
+- `app/main.py`
+- `rag/hybrid.py`
+- `client/src/App.jsx`
+- `client/src/lib/api.js`
+- `client/src/lib/consulta.js`
+- `client/src/lib/consulta.test.js`
+- `client/src/styles.css`
+- `client/package.json`
+- `tests/test_api_rag.py`
+- `tests/test_retriever.py`
+- `CHANGELOG.md`
+
+### Tests
+
+`236 passed, 1 skipped` (backend) · `2 passed` (`npm test` client).
+
 ## 2026-10-25 — fix/gate-nombres-otro-proyecto
 
 ### Fixed

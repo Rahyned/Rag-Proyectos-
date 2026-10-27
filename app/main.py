@@ -48,24 +48,10 @@ class _QueryMixin(BaseModel):
 
 
 class _ProyectoMixin(BaseModel):
-    proyecto: str | None = None
-
-    @field_validator("proyecto")
-    @classmethod
-    def _proyecto(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        v = v.strip()
-        if not v or v == "todos":
-            return "todos" if v == "todos" else None
-        try:
-            conocidos = ids_proyectos()
-        except ManifiestoError as exc:
-            log.error("manifiesto inválido: %s", exc)
-            raise ValueError("configuración inválida") from None
-        if v not in conocidos:
-            raise ValueError(f"proyecto desconocido: {v}")
-        return v
+    # Exactamente un proyecto por consulta: el selector de la UI ya no
+    # ofrece «Todos». La validación se hace en el endpoint para responder
+    # 400 (no 422) con un mensaje claro.
+    proyecto: str | list[str] | None = None
 
 
 class SearchRequest(_QueryMixin, _ProyectoMixin):
@@ -82,11 +68,50 @@ class ChatRequest(_QueryMixin, _ProyectoMixin):
 _TOP_K_SINTETICA = 5
 
 
+def _proyecto_unico(valor: str | list[str] | None) -> str:
+    """Exige exactamente un proyecto conocido; si no, responde 400."""
+    if isinstance(valor, list):
+        proyectos = [v.strip() for v in valor if isinstance(v, str) and v.strip()]
+        if len(proyectos) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Elegí un solo proyecto por consulta.",
+            )
+        valor = proyectos[0] if proyectos else None
+    if isinstance(valor, str):
+        # Un array no es la única forma de mandar varios: «stella,cars».
+        proyectos = [p.strip() for p in valor.split(",") if p.strip()]
+        if len(proyectos) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Elegí un solo proyecto por consulta.",
+            )
+        valor = proyectos[0] if proyectos else None
+    if not valor or valor == "todos":
+        raise HTTPException(
+            status_code=400,
+            detail="Elegí un proyecto para preguntar.",
+        )
+    try:
+        conocidos = ids_proyectos()
+    except ManifiestoError as exc:
+        log.error("manifiesto inválido: %s", exc)
+        raise HTTPException(
+            status_code=503, detail="configuración inválida",
+        ) from None
+    if valor not in conocidos:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Proyecto desconocido: {valor}",
+        )
+    return valor
+
+
 def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _hits_or_503(query: str, top_k: int, proyecto: str | None) -> list[dict]:
+def _hits_or_503(query: str, top_k: int, proyecto: str) -> list[dict]:
     try:
         return rag_service.search(query, top_k, proyecto=proyecto)
     except Exception:  # noqa: BLE001 — al cliente solo id de referencia
@@ -149,16 +174,18 @@ if (Path(CORPUS_DIR)).is_dir():
 @app.post("/api/search")
 def search(body: SearchRequest, request: Request):
     ratelimit.check(request, ratelimit.SEARCH_LIMIT, "search")
-    return {"hits": _hits_or_503(body.query, body.top_k, body.proyecto)}
+    proyecto = _proyecto_unico(body.proyecto)
+    return {"hits": _hits_or_503(body.query, body.top_k, proyecto)}
 
 
 @app.post("/api/chat")
 def chat(body: ChatRequest, request: Request):
     ratelimit.check(request, ratelimit.CHAT_LIMIT, "chat")
+    proyecto = _proyecto_unico(body.proyecto)
     top_k = body.top_k
     if body.mode == "sintetica":
         top_k = min(top_k, _TOP_K_SINTETICA)
-    hits = _hits_or_503(body.query, top_k, body.proyecto)
+    hits = _hits_or_503(body.query, top_k, proyecto)
 
     def gen() -> Iterator[str]:
         try:

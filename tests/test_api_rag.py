@@ -55,7 +55,7 @@ def _events(text: str) -> list[dict]:
 
 
 def test_search_ok():
-    resp = client.post("/api/search", json={"query": "agregar cliente"})
+    resp = client.post("/api/search", json={"query": "agregar cliente", "proyecto": "stella"})
     assert resp.status_code == 200
     hits = resp.json()["hits"]
     assert hits[0]["page"] == 15
@@ -66,7 +66,7 @@ def test_search_ok():
 
 
 def test_search_query_corta_rechazada():
-    resp = client.post("/api/search", json={"query": ""})
+    resp = client.post("/api/search", json={"query": "", "proyecto": "stella"})
     assert resp.status_code == 422
 
 
@@ -74,13 +74,13 @@ def test_search_recupera_503_si_falla(monkeypatch):
     def _boom():
         raise RuntimeError("índice roto")
     monkeypatch.setattr(rag_service, "get_retriever", _boom)
-    resp = client.post("/api/search", json={"query": "algo"})
+    resp = client.post("/api/search", json={"query": "algo", "proyecto": "stella"})
     assert resp.status_code == 503
 
 
 def test_chat_fragmentos():
     resp = client.post("/api/chat", json={
-        "query": "agregar cliente", "mode": "fragmentos"})
+        "query": "agregar cliente", "mode": "fragmentos", "proyecto": "stella"})
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/event-stream")
     events = _events(resp.text)
@@ -93,7 +93,7 @@ def test_chat_fragmentos():
 def test_chat_sintetica_sin_llm_cae_a_fragmentos(monkeypatch):
     monkeypatch.setattr(config, "llm_api_key", lambda: "")
     resp = client.post("/api/chat", json={
-        "query": "agregar cliente", "mode": "sintetica"})
+        "query": "agregar cliente", "mode": "sintetica", "proyecto": "stella"})
     events = _events(resp.text)
     assert [e["type"] for e in events] == ["sources", "fallback", "done"]
     assert events[1]["reason"] == "no_key"
@@ -104,7 +104,7 @@ def test_chat_sintetica_ok(monkeypatch):
     monkeypatch.setattr(llm_mod, "stream_answer",
                         lambda q, h: iter(["Según el ", "manual."]))
     resp = client.post("/api/chat", json={
-        "query": "agregar cliente", "mode": "sintetica"})
+        "query": "agregar cliente", "mode": "sintetica", "proyecto": "stella"})
     events = _events(resp.text)
     assert [e["type"] for e in events] == \
         ["sources", "text", "text", "done"]
@@ -118,7 +118,7 @@ def test_chat_sintetica_error_llm_cae_a_fragmentos(monkeypatch):
         raise llm_mod.LLMError("boom")
     monkeypatch.setattr(llm_mod, "stream_answer", _fail)
     resp = client.post("/api/chat", json={
-        "query": "agregar cliente", "mode": "sintetica"})
+        "query": "agregar cliente", "mode": "sintetica", "proyecto": "stella"})
     events = _events(resp.text)
     assert [e["type"] for e in events] == ["sources", "fallback", "done"]
     assert events[1]["reason"] == "upstream"
@@ -131,7 +131,7 @@ def test_chat_sintetica_reason_se_propaga(monkeypatch):
         raise llm_mod.LLMError("x", reason="rate_limited")
     monkeypatch.setattr(llm_mod, "stream_answer", _fail)
     resp = client.post("/api/chat", json={
-        "query": "agregar cliente", "mode": "sintetica"})
+        "query": "agregar cliente", "mode": "sintetica", "proyecto": "stella"})
     events = _events(resp.text)
     assert events[1]["reason"] == "rate_limited"
 
@@ -153,7 +153,7 @@ def test_chat_sintetica_sin_fragmentos_no_llama_al_llm(monkeypatch):
 
     monkeypatch.setattr(llm_mod, "stream_answer", _llm)
     resp = client.post("/api/chat", json={
-        "query": "algo que no existe", "mode": "sintetica"})
+        "query": "algo que no existe", "mode": "sintetica", "proyecto": "stella"})
     events = _events(resp.text)
     assert [e["type"] for e in events] == ["sources", "done"]
     assert events[1] == {"type": "done", "mode": "fragmentos"}
@@ -166,14 +166,14 @@ def test_chat_excepcion_inesperada_cierra_el_stream(monkeypatch):
         yield  # pragma: no cover — lo hace generador
     monkeypatch.setattr(llm_mod, "stream_answer", _boom)
     resp = client.post("/api/chat", json={
-        "query": "agregar cliente", "mode": "sintetica"})
+        "query": "agregar cliente", "mode": "sintetica", "proyecto": "stella"})
     events = _events(resp.text)
     assert [e["type"] for e in events] == ["sources", "fallback", "done"]
     assert events[1]["reason"] == "error"
 
 
 def test_query_solo_espacios_rechazada():
-    resp = client.post("/api/search", json={"query": "   "})
+    resp = client.post("/api/search", json={"query": "   ", "proyecto": "stella"})
     assert resp.status_code == 422
 
 
@@ -181,7 +181,7 @@ def test_503_no_fuga_internos(monkeypatch):
     def _boom():
         raise RuntimeError("C:\\Users\\secreto\\chunks.jsonl no existe")
     monkeypatch.setattr(rag_service, "get_retriever", _boom)
-    resp = client.post("/api/search", json={"query": "algo"})
+    resp = client.post("/api/search", json={"query": "algo", "proyecto": "stella"})
     assert resp.status_code == 503
     assert "secreto" not in resp.text
     assert "Recuperación no disponible" in resp.json()["detail"]
@@ -202,10 +202,10 @@ def test_sintetica_limita_top_k_y_search_no(monkeypatch):
 
     rag_service.set_retriever(_Recorder())
     client.post("/api/chat", json={
-        "query": "agregar cliente", "mode": "sintetica", "top_k": 10})
+        "query": "agregar cliente", "mode": "sintetica", "top_k": 10, "proyecto": "stella"})
     client.post("/api/chat", json={
-        "query": "agregar cliente", "mode": "fragmentos", "top_k": 10})
-    client.post("/api/search", json={"query": "agregar cliente", "top_k": 10})
+        "query": "agregar cliente", "mode": "fragmentos", "top_k": 10, "proyecto": "stella"})
+    client.post("/api/search", json={"query": "agregar cliente", "top_k": 10, "proyecto": "stella"})
     assert vistos == [5, 10, 10]
 
 
@@ -236,7 +236,7 @@ def test_presupuesto_agotado_evento_fallback(monkeypatch):
         return _Ctx(resp)
 
     monkeypatch.setattr(llm_mod.httpx, "stream", _stream)
-    body = {"query": "agregar cliente", "mode": "sintetica"}
+    body = {"query": "agregar cliente", "mode": "sintetica", "proyecto": "stella"}
     primero = _events(client.post("/api/chat", json=body).text)
     segundo = _events(client.post("/api/chat", json=body).text)
     assert primero[-1] == {"type": "done", "mode": "sintetica"}
@@ -248,7 +248,7 @@ def test_presupuesto_agotado_evento_fallback(monkeypatch):
 
 
 def test_rate_limit_chat_429():
-    body = {"query": "agregar cliente", "mode": "fragmentos"}
+    body = {"query": "agregar cliente", "mode": "fragmentos", "proyecto": "stella"}
     resp = None
     for _ in range(11):
         resp = client.post("/api/chat", json=body)
@@ -269,7 +269,35 @@ def test_prompt_incluye_paginas():
 
 def test_search_filtra_proyecto_desconocido():
     resp = client.post("/api/search", json={"query": "agregar cliente", "proyecto": "no-existe"})
-    assert resp.status_code == 422
+    assert resp.status_code == 400
+    assert "Proyecto desconocido" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize("payload", [
+    {"query": "agregar cliente"},
+    {"query": "agregar cliente", "proyecto": None},
+    {"query": "agregar cliente", "proyecto": ""},
+    {"query": "agregar cliente", "proyecto": "todos"},
+    {"query": "agregar cliente", "proyecto": []},
+])
+def test_sin_proyecto_400(payload):
+    for endpoint in ("/api/search", "/api/chat"):
+        resp = client.post(endpoint, json=payload)
+        assert resp.status_code == 400, endpoint
+        assert "Elegí un proyecto" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize("proyecto", [
+    ["stella", "solutionscars"],
+    "stella,solutionscars",
+])
+def test_mas_de_un_proyecto_400(proyecto):
+    for endpoint in ("/api/search", "/api/chat"):
+        resp = client.post(
+            endpoint, json={"query": "agregar cliente", "proyecto": proyecto},
+        )
+        assert resp.status_code == 400, endpoint
+        assert "un solo proyecto" in resp.json()["detail"]
 
 
 def test_search_pasa_el_proyecto(monkeypatch):
@@ -302,7 +330,7 @@ def test_manifiesto_roto_no_muestra_la_ruta(monkeypatch, caplog):
             json={"query": "agregar cliente", "proyecto": "stella"},
         )
         lista = client.get("/api/proyectos")
-    assert busqueda.status_code == 422
+    assert busqueda.status_code == 503
     assert lista.status_code == 503
     for resp in (busqueda, lista):
         assert "configuración inválida" in resp.text

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import FaunaBackground from './FaunaBackground'
 import { fetchProyectos, streamChat } from './lib/api'
+import { elegirProyecto, puedeConsultar } from './lib/consulta'
 import { renderMarkdown } from './lib/markdown'
 
 const EJEMPLOS = [
@@ -23,8 +25,9 @@ let nextId = 1
 
 export default function App() {
   const [mode, setMode] = useState('sintetica')
-  const [proyecto, setProyecto] = useState('todos')
+  const [proyecto, setProyecto] = useState('')
   const [proyectos, setProyectos] = useState([])
+  const [proyectosError, setProyectosError] = useState('')
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [messages, setMessages] = useState([])
@@ -32,12 +35,28 @@ export default function App() {
   const chatRef = useRef(null)
   const ctrlRef = useRef(null)
 
+  function cargarProyectos() {
+    setProyectosError('')
+    fetchProyectos()
+      .then((lista) => {
+        setProyectos(lista)
+        setProyectosError('')
+      })
+      .catch((err) => {
+        setProyectos([])
+        setProyecto('')
+        setProyectosError(err.message || 'No se pudieron cargar los proyectos.')
+      })
+  }
+
   useEffect(() => {
-    fetchProyectos().then(setProyectos).catch(() => setProyectos([]))
+    cargarProyectos()
   }, [])
 
   const actual = proyectos.find((p) => p.id === proyecto)
   const ejemplos = actual?.preguntas?.length ? actual.preguntas : EJEMPLOS
+  const listo = puedeConsultar(proyecto, input, busy)
+  const conversando = messages.length > 0
 
   useEffect(() => {
     const el = chatRef.current
@@ -48,7 +67,7 @@ export default function App() {
 
   async function send(query) {
     const text = query.trim()
-    if (!text || busy) return
+    if (!puedeConsultar(proyecto, text, busy)) return
     const botId = nextId++
     setMessages((ms) => [
       ...ms,
@@ -100,16 +119,19 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <header className="header">
-        <div>
-          <h1>Asistente del portafolio</h1>
+    <div className={`shell ${conversando ? 'shell-chat' : 'shell-hero'}`}>
+      <FaunaBackground dimmed={conversando} animate />
+
+      <div className="hoja">
+        <header className="hoja-head halo-title">
+          <h1>¿Qué querés saber?</h1>
           <p className="sub">
             {actual
               ? actual.descripcion
-              : 'Preguntá sobre los proyectos del portafolio'}
+              : 'Elegí un proyecto y hacé tu pregunta. Cada cita indica el documento y la sección.'}
           </p>
-        </div>
+        </header>
+
         <div
           className="modes"
           role="radiogroup"
@@ -137,130 +159,149 @@ export default function App() {
             </button>
           ))}
         </div>
-      </header>
 
-      <div className="proyecto">
-        <label htmlFor="proyecto">Proyecto</label>
-        <select
-          id="proyecto"
-          value={proyecto}
-          onChange={(e) => setProyecto(e.target.value)}
-        >
-          <option value="todos">Todos</option>
-          {proyectos.map((p) => (
-            <option key={p.id} value={p.id}>{p.nombre}</option>
-          ))}
-        </select>
-      </div>
-
-      <main className="chat" ref={chatRef}>
-        <div className="sr-only" aria-live="polite">
-          {announce}
+        <div className="proyecto">
+          <label htmlFor="proyecto">Proyecto</label>
+          <select
+            id="proyecto"
+            value={proyecto}
+            disabled={proyectos.length === 0}
+            onChange={(e) => {
+              const next = elegirProyecto(e.target.value, input, busy)
+              setProyecto(next.proyecto)
+            }}
+            required
+          >
+            <option value="">
+              {proyectos.length === 0 ? 'Cargando proyectos…' : 'Elegí un proyecto…'}
+            </option>
+            {proyectos.map((p) => (
+              <option key={p.id} value={p.id}>{p.nombre}</option>
+            ))}
+          </select>
+          {proyectosError ? (
+            <p className="aviso-proyecto" role="alert">
+              {proyectosError}{' '}
+              <button type="button" className="linkish" onClick={cargarProyectos}>
+                Reintentar
+              </button>
+            </p>
+          ) : !proyecto ? (
+            <p className="aviso-proyecto" role="status">
+              Elegí un proyecto para preguntar
+            </p>
+          ) : null}
         </div>
 
-        {messages.length === 0 && (
-          <div className="empty">
-            <p>
-              {actual
-                ? `Preguntas sobre ${actual.nombre}. Cada cita indica el proyecto, el documento y la sección.`
-                : 'Hacé una pregunta. Si no elegís un proyecto, lo detecto en el texto. Cada cita indica el proyecto, el documento y la sección.'}
-            </p>
-            <div className="chips">
-              {ejemplos.map((q) => (
-                <button key={q} type="button" className="chip" onClick={() => send(q)}>
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {messages.map((m) =>
-          m.role === 'user' ? (
-            <div key={m.id} className="msg user">
-              {m.text}
-            </div>
-          ) : (
-            <div key={m.id} className="msg bot">
-              {m.fallback && (
-                <p className="notice">
-                  {FALLBACK_TEXT[m.fallback] ?? FALLBACK_TEXT.error}
-                </p>
-              )}
-              {m.text && (
-                <div
-                  className="answer"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(m.text) }}
-                />
-              )}
-              {m.error && (
-                <p className="error" role="alert">
-                  {m.error}
-                </p>
-              )}
-              {m.pending && !m.text && !m.error && (
-                <p className="pending" role="status">
-                  Buscando…
-                </p>
-              )}
-              {!m.pending && !m.text && !m.error && !m.fallback && m.hits.length === 0 && (
-                <p className="notice">
-                  No encontré información sobre esa pregunta. ¿Podés reformularla?
-                </p>
-              )}
-
-              {m.hits.length > 0 && (
-                <ul className="sources">
-                  {m.hits.map((h) => (
-                    <li key={h.chunk_id}>
-                      {h.url ? (
-                        <a
-                          className="cite"
-                          href={h.url.startsWith('http') ? h.url : `${import.meta.env.BASE_URL}${h.url}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {h.citation}
-                        </a>
-                      ) : (
-                        <span className="cite estatica">{h.citation}</span>
-                      )}
-                      <span className="snippet">
-                        {h.snippet ?? h.text.slice(0, 220)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ),
-        )}
-      </main>
-
-      <div className="composer">
-        <form onSubmit={(e) => { e.preventDefault(); send(input) }}>
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ej.: ¿cómo cargo un trabajo nuevo?"
-            minLength={2}
-            maxLength={500}
-            aria-label="Tu pregunta"
-          />
-          {busy ? (
+        <div className="chips">
+          {ejemplos.map((q) => (
             <button
+              key={q}
               type="button"
-              className="stop"
-              onClick={() => ctrlRef.current?.abort()}
+              className="chip"
+              disabled={!proyecto || busy}
+              onClick={() => send(q)}
             >
-              ■ Detener
+              {q}
             </button>
-          ) : (
-            <button type="submit" disabled={!input.trim()}>
-              Consultar
-            </button>
-          )}
-        </form>
+          ))}
+        </div>
+
+        {conversando && (
+          <main className="chat" ref={chatRef}>
+            <div className="sr-only" aria-live="polite">
+              {announce}
+            </div>
+            {messages.map((m) =>
+              m.role === 'user' ? (
+                <div key={m.id} className="msg user">
+                  {m.text}
+                </div>
+              ) : (
+                <div key={m.id} className="msg bot">
+                  {m.fallback && (
+                    <p className="notice">
+                      {FALLBACK_TEXT[m.fallback] ?? FALLBACK_TEXT.error}
+                    </p>
+                  )}
+                  {m.text && (
+                    <div
+                      className="answer"
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(m.text) }}
+                    />
+                  )}
+                  {m.error && (
+                    <p className="error" role="alert">
+                      {m.error}
+                    </p>
+                  )}
+                  {m.pending && !m.text && !m.error && (
+                    <p className="pending" role="status">
+                      Buscando…
+                    </p>
+                  )}
+                  {!m.pending && !m.text && !m.error && !m.fallback && m.hits.length === 0 && (
+                    <p className="notice">
+                      No encontré información sobre esa pregunta. ¿Podés reformularla?
+                    </p>
+                  )}
+                  {m.hits.length > 0 && (
+                    <ul className="sources">
+                      {m.hits.map((h) => (
+                        <li key={h.chunk_id}>
+                          {h.url ? (
+                            <a
+                              className="cite"
+                              href={h.url.startsWith('http') ? h.url : `${import.meta.env.BASE_URL}${h.url}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {h.citation}
+                            </a>
+                          ) : (
+                            <span className="cite estatica">{h.citation}</span>
+                          )}
+                          <span className="snippet">
+                            {h.snippet ?? h.text.slice(0, 220)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ),
+            )}
+          </main>
+        )}
+
+        <div className="composer-shell halo-input">
+          <form
+            className="composer"
+            onSubmit={(e) => { e.preventDefault(); send(input) }}
+          >
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ej.: ¿cómo cargo un trabajo nuevo?"
+              minLength={2}
+              maxLength={500}
+              aria-label="Tu pregunta"
+            />
+            {busy ? (
+              <button
+                type="button"
+                className="stop"
+                onClick={() => ctrlRef.current?.abort()}
+              >
+                ■ Detener
+              </button>
+            ) : (
+              <button type="submit" disabled={!listo}>
+                Consultar
+              </button>
+            )}
+          </form>
+        </div>
       </div>
     </div>
   )

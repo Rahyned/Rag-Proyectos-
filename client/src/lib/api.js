@@ -1,8 +1,26 @@
+function apiBase() {
+  try {
+    return import.meta.env?.BASE_URL || '/'
+  } catch {
+    return '/'
+  }
+}
+
 export async function fetchProyectos() {
-  const resp = await fetch(`${import.meta.env.BASE_URL}api/proyectos`)
-  if (!resp.ok) throw new Error(`API ${resp.status}`)
+  const resp = await fetch(`${apiBase()}api/proyectos`)
+  if (!resp.ok) {
+    throw new Error(
+      resp.status === 502 || resp.status === 503
+        ? 'No se pudo cargar la lista de proyectos (API caída).'
+        : `API ${resp.status}`,
+    )
+  }
   const body = await resp.json()
-  return body.proyectos ?? []
+  const lista = body.proyectos ?? []
+  if (!Array.isArray(lista) || lista.length === 0) {
+    throw new Error('La API no devolvió proyectos.')
+  }
+  return lista
 }
 
 export async function streamChat({
@@ -15,14 +33,13 @@ export async function streamChat({
   onFallback,
   onDone,
 }) {
-  const resp = await fetch(`${import.meta.env.BASE_URL}api/chat`, {
+  const resp = await fetch(`${apiBase()}api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       query,
       mode,
-      // «Todos» no fuerza un proyecto: la API lo detecta en la pregunta.
-      ...(proyecto && proyecto !== 'todos' ? { proyecto } : {}),
+      proyecto,
     }),
     signal,
   })

@@ -173,7 +173,7 @@ def test_gate_no_vacia_por_nombre_de_otro_proyecto(monkeypatch):
 def test_nombres_en_solo_docs_del_recorte(monkeypatch):
     monkeypatch.setenv("RAG_DENSE", "0")
     retriever = _retriever()
-    allowed = retriever._mascara("portafolio-web", "¿qué es RioDent en el portafolio?")
+    allowed = retriever._mascara("portafolio-web")
     # Sin filtro: gana laboratorio-riodent. Con filtro: portafolio o nada de lab.
     assert retriever._doc_nombrado("¿qué es RioDent en el portafolio?") == (
         "laboratorio-riodent"
@@ -412,8 +412,8 @@ def test_dimension_distinta_cae_a_bm25(monkeypatch, tmp_path):
     assert retriever._dense_error == "dimension"
 
 
-def test_filtra_y_detecta_proyecto(monkeypatch, tmp_path):
-    """El metadato se aplica antes de rankear; si no hay selector, mira la pregunta."""
+def test_filtra_por_proyecto_sin_detectar(monkeypatch, tmp_path):
+    """El metadato se aplica antes de rankear y ya no se adivina del texto."""
     import faiss
     import numpy as np
 
@@ -444,8 +444,77 @@ def test_filtra_y_detecta_proyecto(monkeypatch, tmp_path):
     retriever = HybridRetriever(path, tmp_path / "index.faiss")
     solo = retriever.search("agregar un cliente nuevo", 5, proyecto="stella")
     assert solo and {h["proyecto"] for h in solo} == {"stella"}
-    detectado = retriever.search("agregar un cliente nuevo en STELLA", 5)
-    assert detectado and {h["proyecto"] for h in detectado} == {"stella"}
+    # Sin proyecto la máscara deja todo el corpus (ya no se adivina del texto).
+    assert retriever._mascara(None).all()
+    assert list(retriever._mascara("stella")) == [True, False]
+    # bm25 (sin gate) ve ambos; nombrar STELLA en la pregunta no recorta.
+    ambos = retriever.bm25("agregar un cliente nuevo en STELLA", 5)
+    assert {h["proyecto"] for h in ambos} == {"stella", "cars"}
     cita = rag_service.enrich(solo, "cliente")[0]
     assert cita["url"] is None
     assert cita["citation"] == "STELLA · Clientes (pág. 1)"
+
+
+def test_proyecto_elegido_nunca_devuelve_otro(monkeypatch):
+    """Con el índice real, el filtro se aplica antes de rankear."""
+    monkeypatch.setenv("RAG_DENSE", "0")
+    retriever = _retriever()
+    for proyecto, consulta in (
+        ("stella", "¿cómo agrego un cliente nuevo?"),
+        ("solutionscars", "¿cómo agrego un cliente nuevo?"),
+        ("laboratorio-riodent", "¿cómo pido la toma de color?"),
+        ("portafolio-web", "¿qué proyectos hiciste?"),
+    ):
+        hits = retriever.search(consulta, 5, proyecto=proyecto)
+        assert all(h["proyecto"] == proyecto for h in hits), proyecto
+
+
+def test_gate_sigue_activo_con_filtro(monkeypatch, tmp_path):
+    """Un término del otro proyecto no abre el gate del proyecto elegido."""
+    import faiss
+    import numpy as np
+
+    monkeypatch.setenv("RAG_DENSE", "0")
+    filas = [
+        {
+            "chunk_id": "stella:p1:0",
+            "doc_id": "stella",
+            "title": "STELLA",
+            "page": 1,
+            "text": "alta de un cliente y facturación",
+            "proyecto": "stella",
+            "proyecto_nombre": "STELLA",
+            "seccion": "Clientes",
+            "publico": True,
+            "tipo": "manual",
+        },
+        {
+            "chunk_id": "cars:p1:0",
+            "doc_id": "cars",
+            "title": "SolutionsCars",
+            "page": 1,
+            "text": "cambiar bujías del carburador",
+            "proyecto": "cars",
+            "proyecto_nombre": "SolutionsCars",
+            "seccion": "Taller",
+            "publico": True,
+            "tipo": "manual",
+        },
+    ]
+    path = tmp_path / "chunks.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(f, ensure_ascii=False) for f in filas) + "\n",
+        encoding="utf-8",
+    )
+    index = faiss.IndexFlatIP(4)
+    index.add(np.ones((2, 4), dtype=np.float32))
+    faiss.write_index(index, str(tmp_path / "index.faiss"))
+    retriever = HybridRetriever(path, tmp_path / "index.faiss")
+
+    assert retriever.search(
+        "cambiar bujías del carburador", 5, proyecto="stella",
+    ) == []
+    hits = retriever.search(
+        "cambiar bujías del carburador", 5, proyecto="cars",
+    )
+    assert hits and {h["proyecto"] for h in hits} == {"cars"}

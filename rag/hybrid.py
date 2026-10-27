@@ -18,7 +18,7 @@ from .config import (BM25_B, BM25_BIGRAM_BONUS, BM25_K1, CHUNKS_PATH,
                      glosario_peso, rerank_enabled, rerank_keep, rerank_mode,
                      rerank_top_n, rerank_weight)
 from .embeddings import EmbedError, crear_embedder
-from .manifiesto import ManifiestoError, cargar, detectar_proyecto
+from .manifiesto import ManifiestoError, cargar
 from .rerank import CloudflareReranker, RerankError, fusionar_rrf
 from .sinonimos import expandir
 
@@ -243,18 +243,16 @@ class HybridRetriever:
         )
         self._dense_error: str | None = None
 
-    def _mascara(self, proyecto: str | None, query: str) -> np.ndarray:
-        """Índices del proyecto pedido, detectado, o de todo el corpus."""
-        pid = proyecto
-        if pid is None:
-            try:
-                pid = detectar_proyecto(query)
-            except ManifiestoError:
-                pid = None
-        if not pid or pid == "todos":
+    def _mascara(self, proyecto: str | None) -> np.ndarray:
+        """Índices del proyecto pedido; sin proyecto, todo el corpus.
+
+        La detección automática desde el texto se retiró: la API exige un
+        proyecto y el filtro no puede depender de la pregunta.
+        """
+        if not proyecto or proyecto == "todos":
             return np.ones(self._n, dtype=bool)
         return np.array(
-            [c.get("proyecto") == pid for c in self.chunks], dtype=bool
+            [c.get("proyecto") == proyecto for c in self.chunks], dtype=bool
         )
 
     def _lex(self, query: str, allowed: np.ndarray,
@@ -285,7 +283,7 @@ class HybridRetriever:
 
     def bm25(self, query: str, top_k: int = TOP_K,
              proyecto: str | None = None) -> list[dict]:
-        allowed = self._mascara(proyecto, query)
+        allowed = self._mascara(proyecto)
         scores = self._peso_glosario(self._lex(query, allowed))
         doc_id = self._doc_nombrado(query, allowed)
         if (
@@ -303,7 +301,7 @@ class HybridRetriever:
         con timeout o con el modelo local roto, responde igual con lo léxico.
         Si el reranker falla, queda el orden del RRF.
         """
-        allowed = self._mascara(proyecto, query)
+        allowed = self._mascara(proyecto)
         lex = self._lex(query, allowed)
         # El glosario se castiga en el ranking, no en el umbral: una pregunta
         # que solo matchea una definición igual abre el gate.
@@ -417,7 +415,7 @@ class HybridRetriever:
         canal denso no está disponible. El cache del embedder evita repetir
         la llamada cuando la eval prueba varias fusiones RRF.
         """
-        allowed = self._mascara(proyecto, query)
+        allowed = self._mascara(proyecto)
         lex = self._lex(query, allowed)
         if (
             not dense_enabled()
