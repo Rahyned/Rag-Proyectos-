@@ -13,7 +13,7 @@
 
 ### Changed
 
-- UI en una sola «hoja» neumórfica sobre el océano (relieve soft + inset).
+- UI en una sola «hoja» neumórfica blanca translúcida (relieve soft + inset).
 - Nado: separación fija, asoman poco del borde, evitan esquinas;
   pectorales visibles, más tonalidades y partículas/burbujas de agua.
 - El selector de proyecto muestra error + Reintentar si la API falla
