@@ -1,5 +1,34 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-27 — feat/un-proyecto-por-consulta
+
+### Changed
+
+- La API exige exactamente un proyecto conocido en `/api/search` y
+  `/api/chat` (400 si falta, es `todos` o viene más de uno).
+- El retriever ya no detecta el proyecto desde el texto: solo filtra por
+  el `proyecto` pedido.
+- El selector de la UI quita «Todos», deshabilita Consultar sin proyecto
+  y muestra el aviso «Elegí un proyecto para preguntar».
+
+### Files
+
+- `app/main.py`
+- `rag/hybrid.py`
+- `client/src/App.jsx`
+- `client/src/lib/api.js`
+- `client/src/lib/consulta.js`
+- `client/src/lib/consulta.test.js`
+- `client/src/styles.css`
+- `client/package.json`
+- `tests/test_api_rag.py`
+- `tests/test_retriever.py`
+- `CHANGELOG.md`
+
+### Tests
+
+`236 passed, 1 skipped` (backend) · `2 passed` (`npm test` client).
+
 ## 2026-10-25 — fix/gate-nombres-otro-proyecto
 
 ### Fixed

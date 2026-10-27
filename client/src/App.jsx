@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchProyectos, streamChat } from './lib/api'
+import { puedeConsultar } from './lib/consulta'
 import { renderMarkdown } from './lib/markdown'
 
 const EJEMPLOS = [
@@ -23,7 +24,7 @@ let nextId = 1
 
 export default function App() {
   const [mode, setMode] = useState('sintetica')
-  const [proyecto, setProyecto] = useState('todos')
+  const [proyecto, setProyecto] = useState('')
   const [proyectos, setProyectos] = useState([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -38,6 +39,7 @@ export default function App() {
 
   const actual = proyectos.find((p) => p.id === proyecto)
   const ejemplos = actual?.preguntas?.length ? actual.preguntas : EJEMPLOS
+  const listo = puedeConsultar(proyecto, input, busy)
 
   useEffect(() => {
     const el = chatRef.current
@@ -48,7 +50,7 @@ export default function App() {
 
   async function send(query) {
     const text = query.trim()
-    if (!text || busy) return
+    if (!puedeConsultar(proyecto, text, busy)) return
     const botId = nextId++
     setMessages((ms) => [
       ...ms,
@@ -145,12 +147,20 @@ export default function App() {
           id="proyecto"
           value={proyecto}
           onChange={(e) => setProyecto(e.target.value)}
+          required
         >
-          <option value="todos">Todos</option>
+          <option value="" disabled>
+            Elegí un proyecto…
+          </option>
           {proyectos.map((p) => (
             <option key={p.id} value={p.id}>{p.nombre}</option>
           ))}
         </select>
+        {!proyecto && (
+          <p className="aviso-proyecto" role="status">
+            Elegí un proyecto para preguntar
+          </p>
+        )}
       </div>
 
       <main className="chat" ref={chatRef}>
@@ -161,13 +171,17 @@ export default function App() {
         {messages.length === 0 && (
           <div className="empty">
             <p>
-              {actual
-                ? `Preguntas sobre ${actual.nombre}. Cada cita indica el proyecto, el documento y la sección.`
-                : 'Hacé una pregunta. Si no elegís un proyecto, lo detecto en el texto. Cada cita indica el proyecto, el documento y la sección.'}
+              Elegí un proyecto y hacé tu pregunta. Cada cita indica el documento y la sección.
             </p>
             <div className="chips">
               {ejemplos.map((q) => (
-                <button key={q} type="button" className="chip" onClick={() => send(q)}>
+                <button
+                  key={q}
+                  type="button"
+                  className="chip"
+                  disabled={!proyecto || busy}
+                  onClick={() => send(q)}
+                >
                   {q}
                 </button>
               ))}
@@ -256,7 +270,7 @@ export default function App() {
               ■ Detener
             </button>
           ) : (
-            <button type="submit" disabled={!input.trim()}>
+            <button type="submit" disabled={!listo}>
               Consultar
             </button>
           )}

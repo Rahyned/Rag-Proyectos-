@@ -21,8 +21,7 @@ export async function streamChat({
     body: JSON.stringify({
       query,
       mode,
-      // «Todos» no fuerza un proyecto: la API lo detecta en la pregunta.
-      ...(proyecto && proyecto !== 'todos' ? { proyecto } : {}),
+      proyecto,
     }),
     signal,
   })
