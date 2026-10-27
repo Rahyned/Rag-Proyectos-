@@ -14,6 +14,8 @@
 ### Changed
 
 - UI en una sola «hoja» glass (blur) sobre el océano; composer glass.
+- Nado: separación fija, asoman poco del borde, evitan esquinas;
+  pectorales visibles, más tonalidades y partículas/burbujas de agua.
 - El selector de proyecto muestra error + Reintentar si la API falla
   (antes tragaba el error y dejaba el select vacío).
 

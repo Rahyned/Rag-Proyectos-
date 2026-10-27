@@ -197,9 +197,9 @@ function whaleProfile(variantId) {
       // Bien panzona en planta.
       halfW: [8, 22, 40, 46, 44, 36, 28, 16],
       pecAt: 3,
-      pecLen: 1.05,
-      flukeSpan: 72,
-      flukeReach: 44,
+      pecLen: 1.35,
+      flukeSpan: 78,
+      flukeReach: 52,
       headR: 22,
     }
   }
@@ -217,42 +217,61 @@ function whaleProfile(variantId) {
     // Oval dorsal ancho (franca austral vista desde arriba).
     halfW: [7, 20, 38, 46, 44, 36, 26, 14],
     pecAt: 3,
-    pecLen: 1.15,
-    flukeSpan: 78,
-    flukeReach: 54,
+    pecLen: 1.45,
+    flukeSpan: 86,
+    flukeReach: 62,
     headR: 18,
   }
 }
 
-/** Aletas pectorales hacia los costados (simétricas en planta). */
+/**
+ * Aletas pectorales bien abiertas (planta): se leen como paletas laterales
+ * tras el downsample a baldosas ASCII.
+ */
 function drawPectoral(ctx, pec, T, side, len, pal, bodyHalf) {
-  const rootIn = bodyHalf * 0.85
+  const rootIn = bodyHalf * 0.72
+  const reach = 68 * len
   const root = {
     x: pec.x + T.nx * side * rootIn,
     y: pec.y + T.ny * side * rootIn,
   }
-  // Casi perpendiculares al cuerpo: se leen como “alas” desde arriba.
   const tip = {
-    x: pec.x + T.nx * side * (48 * len) - T.tx * 4 * len,
-    y: pec.y + T.ny * side * (48 * len) - T.ty * 4 * len,
+    x: pec.x + T.nx * side * reach - T.tx * 8 * len,
+    y: pec.y + T.ny * side * reach - T.ty * 8 * len,
   }
   const midFwd = {
-    x: pec.x + T.nx * side * (28 * len) + T.tx * 10 * len,
-    y: pec.y + T.ny * side * (28 * len) + T.ty * 10 * len,
+    x: pec.x + T.nx * side * (reach * 0.55) + T.tx * 22 * len,
+    y: pec.y + T.ny * side * (reach * 0.55) + T.ty * 22 * len,
   }
   const midBack = {
-    x: pec.x + T.nx * side * (22 * len) - T.tx * 6 * len,
-    y: pec.y + T.ny * side * (22 * len) - T.ty * 6 * len,
+    x: pec.x + T.nx * side * (reach * 0.48) - T.tx * 18 * len,
+    y: pec.y + T.ny * side * (reach * 0.48) - T.ty * 18 * len,
   }
-  ctx.fillStyle = pal.fin
+  const path = new Path2D()
+  path.moveTo(root.x, root.y)
+  path.quadraticCurveTo(midFwd.x, midFwd.y, tip.x, tip.y)
+  path.quadraticCurveTo(midBack.x, midBack.y, root.x, root.y)
+
+  // Relleno base + degradé raíz→punta (más tonos).
+  const grad = ctx.createLinearGradient(root.x, root.y, tip.x, tip.y)
+  grad.addColorStop(0, pal.fin)
+  grad.addColorStop(0.45, pal.mid)
+  grad.addColorStop(1, pal.finEdge)
+  ctx.fillStyle = grad
+  ctx.fill(path)
+  // Nervio central más claro.
+  ctx.strokeStyle = pal.edge
+  ctx.lineWidth = 3.5
   ctx.beginPath()
   ctx.moveTo(root.x, root.y)
-  ctx.quadraticCurveTo(midFwd.x, midFwd.y, tip.x, tip.y)
-  ctx.quadraticCurveTo(midBack.x, midBack.y, root.x, root.y)
-  ctx.fill()
-  ctx.strokeStyle = pal.finEdge
-  ctx.lineWidth = 2
+  ctx.lineTo(
+    pec.x + T.nx * side * (reach * 0.78) - T.tx * 4 * len,
+    pec.y + T.ny * side * (reach * 0.78) - T.ty * 4 * len,
+  )
   ctx.stroke()
+  ctx.strokeStyle = pal.finEdge
+  ctx.lineWidth = 2.5
+  ctx.stroke(path)
 }
 
 /** Ballena franca austral — SIEMPRE vista desde arriba (cenital). */
@@ -270,10 +289,12 @@ function drawBallena(ctx, opts = {}) {
   const pts = spinePoints(profile.joints, wave, amp * (isCria ? 0.7 : 1))
   const T = tangents(pts)
 
-  // Capas simétricas: cuerpo → flancos → cresta central.
+  // Capas de tono: borde oscuro → cuerpo → flanco → cresta clara.
+  fillBody(ctx, pts, halfW.map((w) => w * 1.06), pal.ridge)
   fillBody(ctx, pts, halfW, pal.body)
-  fillBody(ctx, pts, halfW.map((w) => w * 0.78), pal.mid)
-  fillBody(ctx, pts, halfW.map((w) => w * 0.38), pal.ridge)
+  fillBody(ctx, pts, halfW.map((w) => w * 0.82), pal.mid)
+  fillBody(ctx, pts, halfW.map((w) => w * 0.48), pal.finEdge)
+  fillBody(ctx, pts, halfW.map((w) => w * 0.28), pal.edge)
 
   // Bordes claros en AMBOS flancos (simetría dorsal, no “panza abajo”).
   for (const s of [-1, 1]) {
@@ -289,33 +310,54 @@ function drawBallena(ctx, opts = {}) {
     ctx.stroke()
   }
 
-  // Degradé cola→cabeza sobre el lomo.
+  // Degradé cola→cabeza sobre el lomo (más bandas de tono).
   const along = ctx.createLinearGradient(
     pts[0].x, pts[0].y, pts[pts.length - 1].x, pts[pts.length - 1].y,
   )
-  along.addColorStop(0, 'rgba(0,0,0,0.25)')
-  along.addColorStop(0.5, 'rgba(0,0,0,0)')
-  along.addColorStop(1, pal.edge)
-  fillBody(ctx, pts, halfW.map((w) => w * 0.7), along)
+  along.addColorStop(0, 'rgba(0,0,0,0.28)')
+  along.addColorStop(0.28, 'rgba(0,0,0,0.08)')
+  along.addColorStop(0.55, 'rgba(255,255,255,0.06)')
+  along.addColorStop(0.82, pal.edge)
+  along.addColorStop(1, 'rgba(255,255,255,0.2)')
+  fillBody(ctx, pts, halfW.map((w) => w * 0.72), along)
 
-  // Moteado simétrico.
-  ctx.fillStyle = pal.mottled
+  // Moteado denso (varios tamaños / opacidades) → más tonalidades en el sample.
   for (let i = 1; i < pts.length - 1; i++) {
     for (const s of [-1, 1]) {
-      if ((i + (s > 0 ? 0 : 1)) % 2 === 0) continue
+      const seed = i * 3 + (s > 0 ? 1 : 0)
+      ctx.fillStyle = seed % 2 === 0 ? pal.mottled : pal.callus
       ctx.beginPath()
       ctx.ellipse(
-        pts[i].x + T[i].nx * s * halfW[i] * 0.48,
-        pts[i].y + T[i].ny * s * halfW[i] * 0.48,
-        7 + (i % 3) * 2,
-        3.2,
+        pts[i].x + T[i].nx * s * halfW[i] * (0.35 + (seed % 3) * 0.12),
+        pts[i].y + T[i].ny * s * halfW[i] * (0.35 + (seed % 3) * 0.12),
+        5 + (seed % 4) * 2.2,
+        2.6 + (seed % 3),
         Math.atan2(T[i].ty, T[i].tx),
         0,
         Math.PI * 2,
       )
       ctx.fill()
+      if (seed % 3 === 0) {
+        ctx.fillStyle = pal.callusHi
+        ctx.beginPath()
+        ctx.ellipse(
+          pts[i].x + T[i].nx * s * halfW[i] * 0.22,
+          pts[i].y + T[i].ny * s * halfW[i] * 0.22,
+          3.2,
+          1.8,
+          Math.atan2(T[i].ty, T[i].tx),
+          0,
+          Math.PI * 2,
+        )
+        ctx.fill()
+      }
     }
   }
+
+  // Aletas pectorales ANTES de la cabeza/cola para que no las tape el downsample.
+  const pecI = Math.min(profile.pecAt, pts.length - 1)
+  drawPectoral(ctx, pts[pecI], T[pecI], 1, profile.pecLen * bulk, pal, halfW[pecI])
+  drawPectoral(ctx, pts[pecI], T[pecI], -1, profile.pecLen * bulk, pal, halfW[pecI])
 
   // Cabeza redonda centrada en el eje (planta).
   const head = pts[pts.length - 1]
@@ -388,10 +430,6 @@ function drawBallena(ctx, opts = {}) {
     ctx.fill()
   }
 
-  const pecI = Math.min(profile.pecAt, pts.length - 1)
-  drawPectoral(ctx, pts[pecI], T[pecI], 1, profile.pecLen * bulk, pal, halfW[pecI])
-  drawPectoral(ctx, pts[pecI], T[pecI], -1, profile.pecLen * bulk, pal, halfW[pecI])
-
   // Cola en V / media luna BIEN ABIERTA (marca de vista cenital).
   const tail = pts[0]
   const tt = T[0]
@@ -417,7 +455,14 @@ function drawBallena(ctx, opts = {}) {
     tail.x + tt.tx * 10,
     tail.y + tt.ty * 10,
   )
-  ctx.fillStyle = pal.fluke
+  const flukeGrad = ctx.createLinearGradient(
+    tail.x, tail.y,
+    tail.x - tt.tx * reach, tail.y - tt.ty * reach,
+  )
+  flukeGrad.addColorStop(0, pal.fluke)
+  flukeGrad.addColorStop(0.55, pal.fin)
+  flukeGrad.addColorStop(1, pal.flukeNotch)
+  ctx.fillStyle = flukeGrad
   ctx.fill(fluke)
   // Muesca central de los flukes (muy legible desde arriba).
   ctx.fillStyle = pal.flukeNotch
@@ -433,11 +478,9 @@ function drawBallena(ctx, opts = {}) {
   )
   ctx.closePath()
   ctx.fill()
-  if (isCria) {
-    ctx.strokeStyle = pal.flukeNotch
-    ctx.lineWidth = 2.5
-    ctx.stroke(fluke)
-  }
+  ctx.strokeStyle = pal.finEdge
+  ctx.lineWidth = isCria ? 2.5 : 2
+  ctx.stroke(fluke)
 }
 
 export const ANIMALS = {

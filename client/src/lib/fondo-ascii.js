@@ -30,11 +30,13 @@ export function cellSizeForWidth(width) {
   return 12
 }
 
-export function animalBudget({ width = 1024, reducedMotion = false } = {}) {
+export function animalBudget({ width = 1024, height = 720, reducedMotion = false } = {}) {
   if (reducedMotion) return 1
-  if (width < 640) return 3
-  if (width < 1024) return 4
-  return 5
+  // Menos ballenas si el viewport no da para mantener distancia.
+  const area = width * height
+  if (area < 500_000 || width < 640) return 2
+  if (area < 900_000 || width < 1024) return 3
+  return 4
 }
 
 function mulberry32(seed) {
@@ -69,13 +71,16 @@ function sampleActor(off, sample, actor, cols, rows, cell, t, reduced) {
   octx.clearRect(0, 0, ow, oh)
 
   const wave = reduced ? 0 : t * 0.004 + actor.phase
-  const amp = reduced ? 0 : 10 * actor.scale
+  // Amp moderada: si es alta, la cola ondula fuera del offscreen y se corta.
+  const amp = reduced ? 0 : 4.5 * actor.scale
 
   octx.save()
   octx.translate(ow / 2, oh / 2)
   // El rumbo es el ángulo de nado (vista dorsal); sin flip que invierta la física.
   octx.rotate(actor.angle)
+  // Ligero offset hacia la cabeza: deja más margen a los flukes (cola).
   octx.scale(actor.scale, actor.scale)
+  octx.translate(18, 0)
   paintAnimal(octx, actor.id, { wave, amp, variant: actor.variant })
   octx.restore()
 
@@ -146,14 +151,34 @@ function paintOcean(ctx, cssW, cssH, t = 0, reduced = false) {
     ctx.stroke()
   }
 
-  // Puntitos / burbujas.
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.45)'
-  for (let i = 0; i < 28; i++) {
-    const bx = (i * 97 + (reduced ? 0 : t * 0.01)) % cssW
-    const by = (i * 53) % cssH
+  // Partículas / espuma a la deriva.
+  const driftN = reduced ? 16 : 36
+  for (let i = 0; i < driftN; i++) {
+    const bx = (i * 97 + (reduced ? 0 : t * (0.008 + (i % 5) * 0.002))) % cssW
+    const by = (i * 53 + Math.sin(t * 0.0006 + i) * (reduced ? 0 : 10) + cssH) % cssH
+    const r = 0.8 + (i % 4) * 0.55
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.28 + (i % 3) * 0.12})`
     ctx.beginPath()
-    ctx.arc(bx, by, 1 + (i % 3) * 0.6, 0, Math.PI * 2)
+    ctx.arc(bx, by, r, 0, Math.PI * 2)
     ctx.fill()
+  }
+
+  // Burbujas ASCII subiendo (se nota el agua).
+  const fontPx = Math.max(10, Math.floor(cell * 0.85))
+  ctx.font = `${fontPx}px ui-monospace, Consolas, "Courier New", monospace`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const bubbles = reduced ? 10 : 22
+  for (let i = 0; i < bubbles; i++) {
+    const speed = 14 + (i % 5) * 7
+    const wobble = reduced ? 0 : Math.sin(t * 0.0012 + i) * 10
+    const bx = ((i * 97) % cssW) + wobble
+    const by = reduced
+      ? (cssH * ((i * 37) % 100)) / 100
+      : cssH - ((t * 0.022 * speed + i * 47) % (cssH + 50))
+    const ch = i % 4 === 0 ? 'o' : i % 4 === 1 ? '°' : i % 4 === 2 ? '.' : '·'
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.28 + (i % 3) * 0.1})`
+    ctx.fillText(ch, bx, by)
   }
 }
 
@@ -164,8 +189,9 @@ function blitSample(ctx, data, cols, rows, cell, alphaMul, tint) {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   const [tr, tg, tb] = tint
-  const tintW = 0.62
-  const sampleW = 0.28
+  // Más peso al sample → se ven capas, aletas y moteado.
+  const tintW = 0.38
+  const sampleW = 0.52
   const shadowOx = cell * 0.35
   const shadowOy = cell * 0.45
 
@@ -180,7 +206,7 @@ function blitSample(ctx, data, cols, rows, cell, alphaMul, tint) {
     }
   }
 
-  // 2) Baldosas pastel + carácter.
+  // 2) Baldosas con bandas de tono (oscuro / medio / claro) + carácter.
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = (r * cols + c) * 4
@@ -190,38 +216,64 @@ function blitSample(ctx, data, cols, rows, cell, alphaMul, tint) {
       const sg = d[i + 1]
       const sb = d[i + 2]
       const br = brightnessOf(sr, sg, sb)
-      // Pastel: mezcla fuerte del tinte de la variante.
-      const lift = 0.55 + br * 0.4
-      const rest = 1 - tintW - sampleW
-      const base = 255 * lift
-      const tileR = Math.round(base * rest + tr * tintW + sr * sampleW)
-      const tileG = Math.round(base * rest + tg * tintW + sg * sampleW)
-      const tileB = Math.round(base * rest + tb * tintW + sb * sampleW)
+      // Tres bandas: sombra, cuerpo, highlight (más tonalidades visibles).
+      let bandLift
+      let bandTint
+      if (br < 0.33) {
+        bandLift = 0.32 + br * 0.35
+        bandTint = 0.85
+      } else if (br < 0.62) {
+        bandLift = 0.48 + br * 0.35
+        bandTint = 1
+      } else {
+        bandLift = 0.62 + br * 0.35
+        bandTint = 1.12
+      }
+      const rest = Math.max(0, 1 - tintW - sampleW)
+      const base = 255 * bandLift
+      const tileR = Math.round(
+        Math.min(255, base * rest + tr * tintW * bandTint + sr * sampleW),
+      )
+      const tileG = Math.round(
+        Math.min(255, base * rest + tg * tintW * bandTint + sg * sampleW),
+      )
+      const tileB = Math.round(
+        Math.min(255, base * rest + tb * tintW * bandTint + sb * sampleW),
+      )
       const x = c * cell
       const y = r * cell
       const alpha = (a / 255) * alphaMul
 
-      ctx.fillStyle = `rgba(${tileR}, ${tileG}, ${tileB}, ${alpha * 0.9})`
+      ctx.fillStyle = `rgba(${tileR}, ${tileG}, ${tileB}, ${alpha * 0.92})`
       ctx.fillRect(x + 0.5, y + 0.5, cell - 1, cell - 1)
-      ctx.strokeStyle = `rgba(255, 255, 255, ${0.35 * alpha})`
+      ctx.strokeStyle = `rgba(255, 255, 255, ${(0.22 + br * 0.28) * alpha})`
       ctx.strokeRect(x + 0.5, y + 0.5, cell - 1, cell - 1)
 
       const ch = rampChar(br)
-      const ink = 0.55
-      const cr = Math.round(tileR * (1 - ink) + tr * ink * 0.5)
-      const cg = Math.round(tileG * (1 - ink) + tg * ink * 0.5)
-      const cb = Math.round(tileB * (1 - ink) + tb * ink * 0.5)
-      ctx.fillStyle = `rgba(${Math.max(40, cr - 40)}, ${Math.max(40, cg - 40)}, ${Math.max(40, cb - 40)}, ${Math.min(1, alpha + 0.15)})`
+      const shade = br < 0.4 ? 55 : br < 0.7 ? 35 : 18
+      ctx.fillStyle = `rgba(${Math.max(20, tileR - shade)}, ${Math.max(20, tileG - shade)}, ${Math.max(20, tileB - shade)}, ${Math.min(1, alpha + 0.18)})`
       ctx.fillText(ch, x + cell / 2, y + cell / 2 + 0.5)
     }
   }
 }
 
-function makeOffscreen(size = 360) {
+/** Offscreen amplio: cuerpo + flukes + rotación + ondulación sin clip. */
+const OFFSCREEN = 600
+
+function makeOffscreen(size = OFFSCREEN) {
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   return { canvas, ctx: canvas.getContext('2d', { willReadFrequently: true }) }
+}
+
+/** Radio personal en px de pantalla (mitad cuerpo + flukes + holgura). */
+function personalR(a) {
+  return 110 * a.scale + 80
+}
+
+function pairMinDist(a, b) {
+  return personalR(a) + personalR(b) + 56
 }
 
 function makeSample(cols, rows) {
@@ -264,6 +316,7 @@ function spawnWhale(rand, cssW, cssH, layer, variantId) {
     layer,
     phase: rand() * Math.PI * 2,
     wanderIn: 1.5 + rand() * 3.5,
+    outTime: 0,
     alphaMul: layer === 0 ? 0.38 : layer === 1 ? 0.58 : 0.88,
     tint: variant.palette.tint,
   }
@@ -284,8 +337,7 @@ function updateSwim(a, dt, cssW, cssH, t, rand, others = []) {
     a.speed = a.baseSpeed * (0.75 + rand() * 0.5)
   }
 
-  // Separación: no pisarse.
-  const keep = 160 + a.scale * 80
+  // Separación suave: virar hacia afuera (mezcla, no reemplazo brusco).
   let sepX = 0
   let sepY = 0
   let sepN = 0
@@ -294,40 +346,77 @@ function updateSwim(a, dt, cssW, cssH, t, rand, others = []) {
     const dx = a.x - o.x
     const dy = a.y - o.y
     const dist = Math.hypot(dx, dy) || 0.01
-    const minDist = keep + o.scale * 55
+    const minDist = pairMinDist(a, o)
     if (dist < minDist) {
-      const push = (minDist - dist) / minDist
+      const push = ((minDist - dist) / minDist) ** 1.2
       sepX += (dx / dist) * push
       sepY += (dy / dist) * push
       sepN++
     }
   }
   if (sepN > 0) {
-    a.heading = Math.atan2(sepY, sepX)
-    a.wanderIn = Math.min(a.wanderIn, 0.7)
-    a.speed = Math.max(a.baseSpeed * 0.95, a.speed)
+    const sepHeading = Math.atan2(sepY, sepX)
+    const w = 0.75
+    a.heading = Math.atan2(
+      Math.sin(a.heading) * (1 - w) + Math.sin(sepHeading) * w,
+      Math.cos(a.heading) * (1 - w) + Math.cos(sepHeading) * w,
+    )
+    a.wanderIn = Math.min(a.wanderIn, 0.5)
+    a.speed = Math.max(a.baseSpeed * 1.05, a.speed * 1.05)
   }
 
-  // Bordes: viran suave; usan toda la pantalla (márgenes chicos).
-  const margin = 48 + a.scale * 20
-  let edgeSteer = false
-  let ex = 0
-  let ey = 0
-  if (a.x < margin) { ex = 1; edgeSteer = true }
-  if (a.x > cssW - margin) { ex = -1; edgeSteer = true }
-  if (a.y < margin) { ey = 1; edgeSteer = true }
-  if (a.y > cssH - margin) { ey = -1; edgeSteer = true }
-  if (edgeSteer) {
-    // Rumbo paralelo al borde + hacia adentro (exploran esquinas, no solo el centro).
+  // Asoman un poco; si están fuera, vuelven rápido (poco tiempo off-screen).
+  const overflow = Math.min(90, personalR(a) * 0.38)
+  const cornerZone = 140 + a.scale * 40
+  const nearL = a.x < cornerZone
+  const nearR = a.x > cssW - cornerZone
+  const nearT = a.y < cornerZone
+  const nearB = a.y > cssH - cornerZone
+  const inCorner = (nearL || nearR) && (nearT || nearB)
+
+  // Evitar esquinas: rumbo claro al centro (evita quedar trabadas oscilando).
+  if (inCorner) {
+    const cx = cssW * 0.5
+    const cy = cssH * 0.5
+    const toCenter = Math.atan2(cy - a.y, cx - a.x)
+    // Sesgo tangencial estable por ballena para no ir siempre al mismo punto.
+    const tangent = toCenter + (a.phase % 2 < 1 ? 0.55 : -0.55)
+    const w = 0.7
     a.heading = Math.atan2(
-      ey || Math.sin(a.angle) * 0.4,
-      ex || Math.cos(a.angle) * 0.4,
+      Math.sin(a.heading) * (1 - w) + Math.sin(tangent) * w,
+      Math.cos(a.heading) * (1 - w) + Math.cos(tangent) * w,
     )
-    a.wanderIn = Math.min(a.wanderIn, 1.0)
+    a.speed = Math.max(a.baseSpeed * 1.2, a.speed)
+    a.wanderIn = Math.min(a.wanderIn, 0.4)
+  }
+
+  const outX = a.x < 0 ? -a.x : a.x > cssW ? a.x - cssW : 0
+  const outY = a.y < 0 ? -a.y : a.y > cssH ? a.y - cssH : 0
+  const outside = outX > 0 || outY > 0
+  if (outside) {
+    a.outTime = (a.outTime ?? 0) + dtSec
+    // Si está fuera en esquina, priorizar centro; si no, eje del borde.
+    const toward = inCorner
+      ? Math.atan2(cssH * 0.5 - a.y, cssW * 0.5 - a.x)
+      : Math.atan2(
+        a.y < 0 ? 1 : a.y > cssH ? -1 : Math.sin(a.angle) * 0.2,
+        a.x < 0 ? 1 : a.x > cssW ? -1 : Math.cos(a.angle) * 0.2,
+      )
+    const depth = Math.min(1, Math.max(outX, outY) / Math.max(1, overflow))
+    const w = Math.min(0.95, 0.55 + a.outTime * 0.9 + depth * 0.35 + (inCorner ? 0.2 : 0))
+    a.heading = Math.atan2(
+      Math.sin(a.heading) * (1 - w) + Math.sin(toward) * w,
+      Math.cos(a.heading) * (1 - w) + Math.cos(toward) * w,
+    )
+    a.speed = Math.max(a.baseSpeed * 1.15, a.speed)
+  } else {
+    a.outTime = 0
   }
 
   let diff = normAngle(a.heading - a.angle)
-  const maxTurn = a.turnRate * dtSec * (sepN > 0 ? 1.7 : 1)
+  const maxTurn = a.turnRate * dtSec * (
+    inCorner ? 3.6 : outside ? 3.2 : sepN > 0 ? 2.2 : 1
+  )
   if (Math.abs(diff) > maxTurn) diff = Math.sign(diff) * maxTurn
   a.angle = normAngle(a.angle + diff)
 
@@ -335,29 +424,18 @@ function updateSwim(a, dt, cssW, cssH, t, rand, others = []) {
   a.y += Math.sin(a.angle) * a.speed * dtSec
   a.y += Math.sin(t * 0.0007 + a.phase) * 0.12
 
-  for (const o of others) {
-    if (o === a) continue
-    const dx = a.x - o.x
-    const dy = a.y - o.y
-    const dist = Math.hypot(dx, dy) || 0.01
-    const minDist = 120 + (a.scale + o.scale) * 50
-    if (dist < minDist) {
-      const push = (minDist - dist) * 0.55
-      a.x += (dx / dist) * push
-      a.y += (dy / dist) * push
-    }
-  }
-
-  // Toda la ventana es navegable; solo un padding mínimo.
-  const hard = 16
-  a.x = Math.min(cssW - hard, Math.max(hard, a.x))
-  a.y = Math.min(cssH - hard, Math.max(hard, a.y))
+  // Tope: pico corto fuera; en esquina, menos overhang para no trabarse.
+  const maxOut = inCorner ? overflow * 0.35 : overflow
+  a.x = Math.min(cssW + maxOut, Math.max(-maxOut, a.x))
+  a.y = Math.min(cssH + maxOut, Math.max(-maxOut, a.y))
 }
 
-/** Coloca actores sin solaparse al nacer / al redimensionar. */
-function spaceActors(actors, cssW, cssH) {
-  const pad = 100
-  for (let pass = 0; pass < 8; pass++) {
+/**
+ * Empuje duro simétrico: garantiza distancia mínima siempre (varios pases).
+ * @param {ReturnType<typeof spawnWhale>[]} actors
+ */
+function resolveOverlaps(actors, cssW, cssH, passes = 4) {
+  for (let pass = 0; pass < passes; pass++) {
     for (let i = 0; i < actors.length; i++) {
       for (let j = i + 1; j < actors.length; j++) {
         const a = actors[i]
@@ -365,20 +443,30 @@ function spaceActors(actors, cssW, cssH) {
         const dx = a.x - b.x
         const dy = a.y - b.y
         const dist = Math.hypot(dx, dy) || 0.01
-        const min = 160 + (a.scale + b.scale) * 50
+        const min = pairMinDist(a, b)
         if (dist < min) {
           const push = (min - dist) / 2
-          a.x += (dx / dist) * push
-          a.y += (dy / dist) * push
-          b.x -= (dx / dist) * push
-          b.y -= (dy / dist) * push
+          const ux = dx / dist
+          const uy = dy / dist
+          a.x += ux * push
+          a.y += uy * push
+          b.x -= ux * push
+          b.y -= uy * push
         }
       }
-      const a = actors[i]
-      a.x = Math.min(cssW - pad, Math.max(pad, a.x))
-      a.y = Math.min(cssH - pad, Math.max(pad, a.y))
+    }
+    // Pueden asomarse poco; no se clavan al borde interior.
+    for (const a of actors) {
+      const overflow = Math.min(90, personalR(a) * 0.38)
+      a.x = Math.min(cssW + overflow, Math.max(-overflow, a.x))
+      a.y = Math.min(cssH + overflow, Math.max(-overflow, a.y))
     }
   }
+}
+
+/** Coloca actores sin solaparse al nacer / al redimensionar. */
+function spaceActors(actors, cssW, cssH) {
+  resolveOverlaps(actors, cssW, cssH, 12)
 }
 
 /**
@@ -402,7 +490,7 @@ export function paintPreview(canvas, opts = {}) {
   const cell = cellSizeForWidth(cssW)
   const cols = Math.ceil(cssW / cell)
   const rows = Math.ceil(cssH / cell)
-  const off = makeOffscreen(400)
+  const off = makeOffscreen()
   const sample = makeSample(cols, rows)
 
   /** @type {ReturnType<typeof spawnWhale>[]} */
@@ -462,6 +550,7 @@ export function paintPreview(canvas, opts = {}) {
     const t = now - t0
     if (moving) {
       for (const a of actors) updateSwim(a, dt, cssW, cssH, t, rng, actors)
+      resolveOverlaps(actors, cssW, cssH, 4)
     }
     paintOcean(ctx, cssW, cssH, t, !moving)
     if (!moving) {
@@ -506,7 +595,7 @@ export function mountFondo(canvas, opts = {}) {
   const animate = opts.animate !== false
   const rand = mulberry32(opts.seed ?? 42)
   let actors = []
-  let off = makeOffscreen(400)
+  let off = makeOffscreen()
   let sample = null
   let cell = 12
   let cols = 0
@@ -555,7 +644,7 @@ export function mountFondo(canvas, opts = {}) {
     cols = Math.ceil(cssW / cell)
     rows = Math.ceil(cssH / cell)
     sample = makeSample(cols, rows)
-    const n = animalBudget({ width: cssW, reducedMotion: reduced })
+    const n = animalBudget({ width: cssW, height: cssH, reducedMotion: reduced })
     actors = Array.from({ length: n }, (_, i) => {
       const vid = BALLENA_VARIANTES[i % BALLENA_VARIANTES.length].id
       return spawnWhale(rand, cssW, cssH, i % 3, vid)
@@ -609,6 +698,7 @@ export function mountFondo(canvas, opts = {}) {
       const t = now - t0
       if (animate && !reduced) {
         for (const a of actors) updateSwim(a, dt, cssW, cssH, t, rand, actors)
+        resolveOverlaps(actors, cssW, cssH, 4)
       }
       paint(t)
     }
