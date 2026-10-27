@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
-import { mountFauna } from './lib/fauna-ascii'
+import { mountFondo } from './lib/fondo-ascii'
 
-/** Fondo a pantalla completa; no recibe clics ni anuncia a lectores de pantalla. */
-export default function FaunaBackground({ dimmed = false }) {
+/** Fondo ASCII a pantalla completa (ballena). pointer-events none + aria-hidden. */
+export default function FaunaBackground({ dimmed = false, animate = true }) {
   const canvasRef = useRef(null)
   const dimmedRef = useRef(dimmed)
   dimmedRef.current = dimmed
@@ -10,9 +10,12 @@ export default function FaunaBackground({ dimmed = false }) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return undefined
-    const engine = mountFauna(canvas, { dimmed: () => dimmedRef.current })
+    const engine = mountFondo(canvas, {
+      dimmed: () => dimmedRef.current,
+      animate,
+    })
     return () => engine.destroy()
-  }, [])
+  }, [animate])
 
   return (
     <canvas

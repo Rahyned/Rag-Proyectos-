@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import FaunaBackground from './FaunaBackground'
 import { fetchProyectos, streamChat } from './lib/api'
-import { puedeConsultar } from './lib/consulta'
+import { elegirProyecto, puedeConsultar } from './lib/consulta'
 import { renderMarkdown } from './lib/markdown'
 
 const EJEMPLOS = [
@@ -27,6 +27,7 @@ export default function App() {
   const [mode, setMode] = useState('sintetica')
   const [proyecto, setProyecto] = useState('')
   const [proyectos, setProyectos] = useState([])
+  const [proyectosError, setProyectosError] = useState('')
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [messages, setMessages] = useState([])
@@ -34,8 +35,22 @@ export default function App() {
   const chatRef = useRef(null)
   const ctrlRef = useRef(null)
 
+  function cargarProyectos() {
+    setProyectosError('')
+    fetchProyectos()
+      .then((lista) => {
+        setProyectos(lista)
+        setProyectosError('')
+      })
+      .catch((err) => {
+        setProyectos([])
+        setProyecto('')
+        setProyectosError(err.message || 'No se pudieron cargar los proyectos.')
+      })
+  }
+
   useEffect(() => {
-    fetchProyectos().then(setProyectos).catch(() => setProyectos([]))
+    cargarProyectos()
   }, [])
 
   const actual = proyectos.find((p) => p.id === proyecto)
@@ -103,129 +118,96 @@ export default function App() {
     }
   }
 
-  const modeToggle = (
-    <div
-      className="modes glass"
-      role="radiogroup"
-      aria-label="Modo de respuesta"
-      onKeyDown={(e) => {
-        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-        e.preventDefault()
-        setMode((m) => (m === 'sintetica' ? 'fragmentos' : 'sintetica'))
-      }}
-    >
-      {[
-        ['sintetica', 'Respuesta sintética'],
-        ['fragmentos', 'Fragmentos'],
-      ].map(([value, label]) => (
-        <button
-          key={value}
-          type="button"
-          role="radio"
-          aria-checked={mode === value}
-          tabIndex={mode === value ? 0 : -1}
-          className={mode === value ? 'mode on' : 'mode'}
-          onClick={() => setMode(value)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  )
-
-  const proyectoSelect = (
-    <div className="proyecto glass">
-      <label htmlFor="proyecto">Proyecto</label>
-      <select
-        id="proyecto"
-        value={proyecto}
-        onChange={(e) => setProyecto(e.target.value)}
-        required
-      >
-        <option value="" disabled>
-          Elegí un proyecto…
-        </option>
-        {proyectos.map((p) => (
-          <option key={p.id} value={p.id}>{p.nombre}</option>
-        ))}
-      </select>
-      {!proyecto && (
-        <p className="aviso-proyecto" role="status">
-          Elegí un proyecto para preguntar
-        </p>
-      )}
-    </div>
-  )
-
-  const composer = (
-    <div className={`composer-shell ${conversando ? '' : 'halo-input'}`}>
-      <form
-        className="composer glass"
-        onSubmit={(e) => { e.preventDefault(); send(input) }}
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ej.: ¿cómo cargo un trabajo nuevo?"
-          minLength={2}
-          maxLength={500}
-          aria-label="Tu pregunta"
-        />
-        {busy ? (
-          <button
-            type="button"
-            className="stop"
-            onClick={() => ctrlRef.current?.abort()}
-          >
-            ■ Detener
-          </button>
-        ) : (
-          <button type="submit" disabled={!listo}>
-            Consultar
-          </button>
-        )}
-      </form>
-    </div>
-  )
-
-  const chips = (
-    <div className="chips">
-      {ejemplos.map((q) => (
-        <button
-          key={q}
-          type="button"
-          className="chip glass"
-          disabled={!proyecto || busy}
-          onClick={() => send(q)}
-        >
-          {q}
-        </button>
-      ))}
-    </div>
-  )
-
   return (
-    <div className={`app ${conversando ? 'app-chat' : 'app-hero'}`}>
-      <FaunaBackground dimmed={conversando} />
+    <div className={`shell ${conversando ? 'shell-chat' : 'shell-hero'}`}>
+      <FaunaBackground dimmed={conversando} animate />
 
-      <header className={`header glass ${conversando ? '' : 'halo-title'}`}>
-        <div>
-          <h1>{conversando ? 'Asistente del portafolio' : '¿Qué querés saber?'}</h1>
+      <div className="hoja">
+        <header className="hoja-head halo-title">
+          <h1>¿Qué querés saber?</h1>
           <p className="sub">
-            {conversando
-              ? (actual
-                ? actual.descripcion
-                : 'Preguntá sobre los proyectos del portafolio')
+            {actual
+              ? actual.descripcion
               : 'Elegí un proyecto y hacé tu pregunta. Cada cita indica el documento y la sección.'}
           </p>
+        </header>
+
+        <div
+          className="modes"
+          role="radiogroup"
+          aria-label="Modo de respuesta"
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+            e.preventDefault()
+            setMode((m) => (m === 'sintetica' ? 'fragmentos' : 'sintetica'))
+          }}
+        >
+          {[
+            ['sintetica', 'Respuesta sintética'],
+            ['fragmentos', 'Fragmentos'],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={mode === value}
+              tabIndex={mode === value ? 0 : -1}
+              className={mode === value ? 'mode on' : 'mode'}
+              onClick={() => setMode(value)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-        {modeToggle}
-      </header>
 
-      {proyectoSelect}
+        <div className="proyecto">
+          <label htmlFor="proyecto">Proyecto</label>
+          <select
+            id="proyecto"
+            value={proyecto}
+            disabled={proyectos.length === 0}
+            onChange={(e) => {
+              const next = elegirProyecto(e.target.value, input, busy)
+              setProyecto(next.proyecto)
+            }}
+            required
+          >
+            <option value="">
+              {proyectos.length === 0 ? 'Cargando proyectos…' : 'Elegí un proyecto…'}
+            </option>
+            {proyectos.map((p) => (
+              <option key={p.id} value={p.id}>{p.nombre}</option>
+            ))}
+          </select>
+          {proyectosError ? (
+            <p className="aviso-proyecto" role="alert">
+              {proyectosError}{' '}
+              <button type="button" className="linkish" onClick={cargarProyectos}>
+                Reintentar
+              </button>
+            </p>
+          ) : !proyecto ? (
+            <p className="aviso-proyecto" role="status">
+              Elegí un proyecto para preguntar
+            </p>
+          ) : null}
+        </div>
 
-      {conversando ? (
-        <>
+        <div className="chips">
+          {ejemplos.map((q) => (
+            <button
+              key={q}
+              type="button"
+              className="chip"
+              disabled={!proyecto || busy}
+              onClick={() => send(q)}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+
+        {conversando && (
           <main className="chat" ref={chatRef}>
             <div className="sr-only" aria-live="polite">
               {announce}
@@ -236,7 +218,7 @@ export default function App() {
                   {m.text}
                 </div>
               ) : (
-                <div key={m.id} className="msg bot glass">
+                <div key={m.id} className="msg bot">
                   {m.fallback && (
                     <p className="notice">
                       {FALLBACK_TEXT[m.fallback] ?? FALLBACK_TEXT.error}
@@ -263,11 +245,10 @@ export default function App() {
                       No encontré información sobre esa pregunta. ¿Podés reformularla?
                     </p>
                   )}
-
                   {m.hits.length > 0 && (
                     <ul className="sources">
                       {m.hits.map((h) => (
-                        <li key={h.chunk_id} className="glass">
+                        <li key={h.chunk_id}>
                           {h.url ? (
                             <a
                               className="cite"
@@ -291,14 +272,37 @@ export default function App() {
               ),
             )}
           </main>
-          {composer}
-        </>
-      ) : (
-        <div className="hero">
-          {chips}
-          {composer}
+        )}
+
+        <div className="composer-shell halo-input">
+          <form
+            className="composer"
+            onSubmit={(e) => { e.preventDefault(); send(input) }}
+          >
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ej.: ¿cómo cargo un trabajo nuevo?"
+              minLength={2}
+              maxLength={500}
+              aria-label="Tu pregunta"
+            />
+            {busy ? (
+              <button
+                type="button"
+                className="stop"
+                onClick={() => ctrlRef.current?.abort()}
+              >
+                ■ Detener
+              </button>
+            ) : (
+              <button type="submit" disabled={!listo}>
+                Consultar
+              </button>
+            )}
+          </form>
         </div>
-      )}
+      </div>
     </div>
   )
 }

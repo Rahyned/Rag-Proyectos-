@@ -1,40 +1,36 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import {
-  SPECIES,
-  animalCount,
-  prefersReducedMotion,
-} from './fauna-ascii.js'
+import { ANIMALS, ANIMAL_IDS, BALLENA_VARIANTES, RAMP } from './fauna-ascii.js'
+import { animalBudget, cellSizeForWidth, prefersReducedMotion } from './fondo-ascii.js'
 
-describe('fauna-ascii', () => {
-  it('incluye las cuatro especies de la costa', () => {
-    assert.deepEqual(Object.keys(SPECIES).sort(), [
-      'ballena',
-      'lobo',
-      'pinguino',
-      'tonina',
-    ])
-    for (const spec of Object.values(SPECIES)) {
-      assert.ok(spec.frames.length >= 1)
-      assert.ok(spec.frames[0].length >= 3)
+describe('fauna-ascii ballena', () => {
+  it('exporta solo la ballena franca con draw vectorial', () => {
+    assert.deepEqual(ANIMAL_IDS, ['ballena'])
+    const b = ANIMALS.ballena
+    assert.equal(b.nombre, 'Ballena franca austral')
+    assert.equal(typeof b.draw, 'function')
+    assert.ok(b.length > 0)
+    assert.ok(b.scale > 0)
+  })
+
+  it('tiene variantes de tamaño y color distintas', () => {
+    assert.ok(BALLENA_VARIANTES.length >= 4)
+    const sizes = new Set(BALLENA_VARIANTES.map((v) => v.size))
+    const bodies = new Set(BALLENA_VARIANTES.map((v) => v.palette.body))
+    assert.ok(sizes.size >= 3, 'tamaños distintos')
+    assert.ok(bodies.size >= 3, 'colores de cuerpo distintos')
+    for (const v of BALLENA_VARIANTES) {
+      assert.equal(v.palette.tint.length, 3)
+      assert.ok(v.callus >= 0 && v.callus <= 1)
     }
   })
 
-  it('respeta prefers-reduced-motion', () => {
-    assert.equal(
-      prefersReducedMotion(() => ({ matches: true })),
-      true,
-    )
-    assert.equal(
-      prefersReducedMotion(() => ({ matches: false })),
-      false,
-    )
-    assert.equal(animalCount({ width: 1400, reducedMotion: true }), 2)
-  })
-
-  it('dibuja menos animales en celular', () => {
-    assert.equal(animalCount({ width: 390, reducedMotion: false }), 3)
-    assert.equal(animalCount({ width: 800, reducedMotion: false }), 5)
-    assert.equal(animalCount({ width: 1400, reducedMotion: false }), 7)
+  it('rampa ASCII y helpers de fondo', () => {
+    assert.equal(RAMP, ' .:-=+*#%@')
+    assert.equal(prefersReducedMotion(() => ({ matches: true })), true)
+    assert.equal(cellSizeForWidth(390), 16)
+    assert.equal(cellSizeForWidth(1400), 12)
+    assert.equal(animalBudget({ width: 390, reducedMotion: false }), 3)
+    assert.equal(animalBudget({ width: 1400, reducedMotion: true }), 1)
   })
 })
