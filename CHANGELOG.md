@@ -1,5 +1,21 @@
 # CHANGELOG — Rag-Proyectos
 
+## 2026-10-28 — feat/fondo-ascii-un-proyecto
+
+### Added
+
+- Favicon pixel-art 16×16 (`client/public/favicon.svg`) como icono de pestaña.
+
+### Files
+
+- `client/index.html`
+- `client/public/favicon.svg`
+- `CHANGELOG.md`
+
+### Tests
+
+- `npm run lint`, `npm test` y `npm run build` en `client/`.
+
 ## 2026-10-27 — feat/ballenas-ascii-offscreen
 
 ### Added
