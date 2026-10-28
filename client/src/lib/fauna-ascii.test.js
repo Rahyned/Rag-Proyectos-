@@ -26,10 +26,10 @@ describe('fauna-ascii ballena', () => {
   })
 
   it('rampa ASCII y helpers de fondo', () => {
-    assert.equal(RAMP, ' .:-=+*#%@')
+    assert.equal(RAMP, ' .·:-=+*#%X@8')
     assert.equal(prefersReducedMotion(() => ({ matches: true })), true)
-    assert.equal(cellSizeForWidth(390), 16)
-    assert.equal(cellSizeForWidth(1400), 12)
+    assert.equal(cellSizeForWidth(390), 12)
+    assert.equal(cellSizeForWidth(1400), 9)
     assert.equal(animalBudget({ width: 390, reducedMotion: false }), 2)
     assert.equal(animalBudget({ width: 1400, height: 900, reducedMotion: false }), 4)
     assert.equal(animalBudget({ width: 1400, reducedMotion: true }), 1)

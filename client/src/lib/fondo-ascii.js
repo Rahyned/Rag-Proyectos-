@@ -25,9 +25,10 @@ export function prefersReducedMotion(matchMedia = globalThis.matchMedia) {
 }
 
 export function cellSizeForWidth(width) {
-  if (width < 640) return 16
-  if (width < 1024) return 14
-  return 12
+  // Celdas más chicas → grilla densa tipo foto-ASCII.
+  if (width < 640) return 12
+  if (width < 1024) return 10
+  return 9
 }
 
 export function animalBudget({ width = 1024, height = 720, reducedMotion = false } = {}) {
@@ -70,9 +71,9 @@ function sampleActor(off, sample, actor, cols, rows, cell, t, reduced) {
   octx.setTransform(1, 0, 0, 1, 0, 0)
   octx.clearRect(0, 0, ow, oh)
 
-  const wave = reduced ? 0 : t * 0.004 + actor.phase
-  // Amp moderada: si es alta, la cola ondula fuera del offscreen y se corta.
-  const amp = reduced ? 0 : 4.5 * actor.scale
+  const wave = reduced ? 0 : t * 0.005 + actor.phase
+  // Ondulación un poco más marcada (inspo nado); offscreen 600 aguanta.
+  const amp = reduced ? 0 : 7 * actor.scale
 
   octx.save()
   octx.translate(ow / 2, oh / 2)
@@ -182,31 +183,41 @@ function paintOcean(ctx, cssW, cssH, t = 0, reduced = false) {
   }
 }
 
+/** Sube saturación sin cambiar el matiz (colores vivos, no pastel). */
+function boostSat(r, g, b, amount = 1.45) {
+  const avg = (r + g + b) / 3
+  return [
+    Math.min(255, Math.max(0, avg + (r - avg) * amount)),
+    Math.min(255, Math.max(0, avg + (g - avg) * amount)),
+    Math.min(255, Math.max(0, avg + (b - avg) * amount)),
+  ]
+}
+
 function blitSample(ctx, data, cols, rows, cell, alphaMul, tint) {
   const d = data.data
-  const fontPx = Math.floor(cell * 0.7)
+  const fontPx = Math.max(7, Math.floor(cell * 0.92))
   ctx.font = `${fontPx}px ui-monospace, Consolas, "Courier New", monospace`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   const [tr, tg, tb] = tint
-  // Más peso al sample → se ven capas, aletas y moteado.
-  const tintW = 0.38
-  const sampleW = 0.52
-  const shadowOx = cell * 0.35
-  const shadowOy = cell * 0.45
+  // Sample dominante + tinte vivo; poco lavado blanco.
+  const tintW = 0.28
+  const sampleW = 0.68
+  const shadowOx = cell * 0.3
+  const shadowOy = cell * 0.4
 
   // 1) Sombra suave debajo (refuerza la vista desde arriba).
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = (r * cols + c) * 4
       if (d[i + 3] < ALPHA_THRESHOLD) continue
-      const alpha = (d[i + 3] / 255) * alphaMul * 0.22
-      ctx.fillStyle = `rgba(40, 80, 100, ${alpha})`
+      const alpha = (d[i + 3] / 255) * alphaMul * 0.2
+      ctx.fillStyle = `rgba(30, 70, 95, ${alpha})`
       ctx.fillRect(c * cell + shadowOx, r * cell + shadowOy, cell - 1, cell - 1)
     }
   }
 
-  // 2) Baldosas con bandas de tono (oscuro / medio / claro) + carácter.
+  // 2) Baldosas brillantes + carácter denso (look foto-ASCII).
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = (r * cols + c) * 4
@@ -216,42 +227,35 @@ function blitSample(ctx, data, cols, rows, cell, alphaMul, tint) {
       const sg = d[i + 1]
       const sb = d[i + 2]
       const br = brightnessOf(sr, sg, sb)
-      // Tres bandas: sombra, cuerpo, highlight (más tonalidades visibles).
-      let bandLift
-      let bandTint
-      if (br < 0.33) {
-        bandLift = 0.32 + br * 0.35
-        bandTint = 0.85
-      } else if (br < 0.62) {
-        bandLift = 0.48 + br * 0.35
-        bandTint = 1
-      } else {
-        bandLift = 0.62 + br * 0.35
-        bandTint = 1.12
+      const [brR, brG, brB] = boostSat(sr, sg, sb, 1.4)
+      const [btR, btG, btB] = boostSat(tr, tg, tb, 1.2)
+      // Mezcla sample+tint (sin empujar a blanco: quemaba la cría arena).
+      let mixR = brR * sampleW + btR * tintW
+      let mixG = brG * sampleW + btG * tintW
+      let mixB = brB * sampleW + btB * tintW
+      // Highlights suaves: un toque más claros, pero del mismo matiz.
+      if (br > 0.82) {
+        mixR = mixR * 0.75 + btR * 0.25
+        mixG = mixG * 0.75 + btG * 0.25
+        mixB = mixB * 0.75 + btB * 0.25
       }
-      const rest = Math.max(0, 1 - tintW - sampleW)
-      const base = 255 * bandLift
-      const tileR = Math.round(
-        Math.min(255, base * rest + tr * tintW * bandTint + sr * sampleW),
-      )
-      const tileG = Math.round(
-        Math.min(255, base * rest + tg * tintW * bandTint + sg * sampleW),
-      )
-      const tileB = Math.round(
-        Math.min(255, base * rest + tb * tintW * bandTint + sb * sampleW),
-      )
+      const contrast = br < 0.35 ? 0.85 : br > 0.75 ? 1.06 : 1
+      const tileR = Math.round(Math.min(255, mixR * contrast))
+      const tileG = Math.round(Math.min(255, mixG * contrast))
+      const tileB = Math.round(Math.min(255, mixB * contrast))
       const x = c * cell
       const y = r * cell
       const alpha = (a / 255) * alphaMul
 
-      ctx.fillStyle = `rgba(${tileR}, ${tileG}, ${tileB}, ${alpha * 0.92})`
-      ctx.fillRect(x + 0.5, y + 0.5, cell - 1, cell - 1)
-      ctx.strokeStyle = `rgba(255, 255, 255, ${(0.22 + br * 0.28) * alpha})`
-      ctx.strokeRect(x + 0.5, y + 0.5, cell - 1, cell - 1)
+      ctx.fillStyle = `rgba(${tileR}, ${tileG}, ${tileB}, ${alpha * 0.95})`
+      ctx.fillRect(x, y, cell, cell)
 
       const ch = rampChar(br)
-      const shade = br < 0.4 ? 55 : br < 0.7 ? 35 : 18
-      ctx.fillStyle = `rgba(${Math.max(20, tileR - shade)}, ${Math.max(20, tileG - shade)}, ${Math.max(20, tileB - shade)}, ${Math.min(1, alpha + 0.18)})`
+      // Carácter un poco más oscuro/saturado encima (textura ASCII).
+      const cr = Math.max(0, Math.min(255, tileR * 0.72))
+      const cg = Math.max(0, Math.min(255, tileG * 0.72))
+      const cb = Math.max(0, Math.min(255, tileB * 0.72))
+      ctx.fillStyle = `rgba(${Math.round(cr)}, ${Math.round(cg)}, ${Math.round(cb)}, ${Math.min(1, alpha + 0.2)})`
       ctx.fillText(ch, x + cell / 2, y + cell / 2 + 0.5)
     }
   }

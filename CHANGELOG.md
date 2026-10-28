@@ -5,8 +5,8 @@
 ### Added
 
 - Fondo ASCII a pantalla completa por render offscreen + muestreo a
-  grilla (baldosas pastel + sombra + rampa ` .:-=+*#%@`), sin sprites.
-- Ballena cenital con 4 variantes pastel (gris-azul, azulada, cría
+  grilla densa (colores vivos + sombra + rampa ` .·:-=+*#%X@8`).
+- Ballena cenital con 4 variantes brillantes (gris-azul, azulada, cría
   arena, callosa coral): tamaño, tinte y callosidades distintas.
 - Océano radial celeste (grilla, ondas, burbujas) detrás de la UI.
 - `/fauna-preview.html` con variantes quietas y en movimiento.
@@ -15,7 +15,7 @@
 
 - UI en una sola «hoja» neumórfica blanca translúcida (relieve soft + inset).
 - Nado: separación fija, asoman poco del borde, evitan esquinas;
-  pectorales visibles, más tonalidades y partículas/burbujas de agua.
+  pectorales visibles, colores más brillantes y partículas de agua.
 - El selector de proyecto muestra error + Reintentar si la API falla
   (antes tragaba el error y dejaba el select vacío).
 
