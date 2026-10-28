@@ -227,15 +227,19 @@ function blitSample(ctx, data, cols, rows, cell, alphaMul, tint) {
       const sg = d[i + 1]
       const sb = d[i + 2]
       const br = brightnessOf(sr, sg, sb)
-      const [brR, brG, brB] = boostSat(sr, sg, sb, 1.5)
-      const [btR, btG, btB] = boostSat(tr, tg, tb, 1.25)
-      // Highlights claros (manchas) se mantienen cerca del blanco.
-      const hi = br > 0.78
-      const mixR = hi ? Math.min(255, brR * 0.35 + 220) : brR * sampleW + btR * tintW
-      const mixG = hi ? Math.min(255, brG * 0.35 + 230) : brG * sampleW + btG * tintW
-      const mixB = hi ? Math.min(255, brB * 0.35 + 245) : brB * sampleW + btB * tintW
-      // Contraste: oscuros más profundos, claros más vivos.
-      const contrast = br < 0.35 ? 0.82 : br > 0.7 ? 1.12 : 1
+      const [brR, brG, brB] = boostSat(sr, sg, sb, 1.4)
+      const [btR, btG, btB] = boostSat(tr, tg, tb, 1.2)
+      // Mezcla sample+tint (sin empujar a blanco: quemaba la cría arena).
+      let mixR = brR * sampleW + btR * tintW
+      let mixG = brG * sampleW + btG * tintW
+      let mixB = brB * sampleW + btB * tintW
+      // Highlights suaves: un toque más claros, pero del mismo matiz.
+      if (br > 0.82) {
+        mixR = mixR * 0.75 + btR * 0.25
+        mixG = mixG * 0.75 + btG * 0.25
+        mixB = mixB * 0.75 + btB * 0.25
+      }
+      const contrast = br < 0.35 ? 0.85 : br > 0.75 ? 1.06 : 1
       const tileR = Math.round(Math.min(255, mixR * contrast))
       const tileG = Math.round(Math.min(255, mixG * contrast))
       const tileB = Math.round(Math.min(255, mixB * contrast))
